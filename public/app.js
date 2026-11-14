@@ -35,6 +35,7 @@ let currentIndex = 0;
 let playbackTimer;
 let pointsOfInterest = [];
 const selectedPoiIndexes = new Set();
+let chartZoom;
 
 const lunarExtent = [-180, -90, 180, 90];
 const lunarProjection = new ol.proj.Projection({
@@ -427,6 +428,42 @@ lunarMap.on('singleclick', event => {
 latitudeInput.addEventListener('change', updateMarkerFromInputs);
 longitudeInput.addEventListener('change', updateMarkerFromInputs);
 updateMarkerFromInputs();
+
+function renderTable() {
+  const start = page * pageSize;
+  const end = Math.min(start + pageSize, result.rows.length);
+  const items = result.rows.slice(start, end).map(({ time, sun, earth }, index) => {
+    const row = document.createElement('tr');
+    const terrain = result.terrain ? terrainAtAzimuth(result.terrain.horizons, sun.azimuth) : undefined;
+    for (const value of [
+      time.slice(0, 16).replace('T', ' '),
+      sun.azimuth.toFixed(6),
+      sun.elevation.toFixed(6),
+      terrain ? (sun.elevation >= 0 && sun.elevation <= terrain.horizonElevation ? 'Blocked' : 'Clear') + ' · horizon ' + terrain.horizonElevation.toFixed(2) + '°' : 'Unavailable',
+      earth.azimuth.toFixed(6),
+      earth.elevation.toFixed(6),
+      terrain ? (earth.elevation >= 0 && earth.elevation <= terrainAtAzimuth(result.terrain.horizons, earth.azimuth).horizonElevation ? 'Blocked' : 'Clear') + ' · horizon ' + terrainAtAzimuth(result.terrain.horizons, earth.azimuth).horizonElevation.toFixed(2) + '°' : 'Unavailable'
+    ]) {
+      const cell = row.insertCell();
+      cell.textContent = value;
+    }
+    return row;
+  });
+  table.replaceChildren(...items);
+  range.textContent = (start + 1) + '–' + end + ' of ' + result.rows.length;
+  previous.disabled = page === 0;
+  next.disabled = end === result.rows.length;
+}
+
+function terrainAtAzimuth(horizons, azimuth) {
+  if (!horizons?.length) return undefined;
+  const normalized = ((azimuth % 360) + 360) % 360;
+  return horizons.reduce((closest, horizon) => {
+    const distance = Math.abs(((horizon.azimuth - normalized + 540) % 360) - 180);
+    const closestDistance = Math.abs(((closest.azimuth - normalized + 540) % 360) - 180);
+    return distance < closestDistance ? horizon : closest;
+  });
+}
 loadPointsOfInterest();
 
 function drawChart() {
@@ -444,8 +481,31 @@ function drawChart() {
   const sunColor = style.getPropertyValue('--accent').trim();
   const earthColor = style.getPropertyValue('--moonlight').trim();
   const plot = { left: 58, right: width - 18, top: 18, bottom: height - 50 };
-  const x = azimuth => plot.left + (((azimuth % 360) + 360) % 360) / 360 * (plot.right - plot.left);
+  const viewCenter = chartZoom?.center ?? 180;
+  const viewSpan = chartZoom ? 60 : 360;
+  const relativeAzimuth = azimuth => ((azimuth - viewCenter + 540) % 360) - 180 + viewCenter;
+  const x = azimuth => plot.left + (relativeAzimuth(azimuth) - (viewCenter - viewSpan / 2)) / viewSpan * (plot.right - plot.left);
   const y = elevation => plot.bottom - (elevation + 90) / 180 * (plot.bottom - plot.top);
+
+  function drawTerrainHorizon() {
+    const horizons = result.terrain?.horizons;
+    if (!horizons?.length) return;
+    context.beginPath();
+    context.strokeStyle = '#c8cdd2';
+    context.lineWidth = 3;
+    context.setLineDash([8, 5]);
+    let started = false;
+    horizons.forEach(point => {
+      const pointAzimuth = relativeAzimuth(point.azimuth);
+      if (chartZoom && (pointAzimuth < viewCenter - viewSpan / 2 || pointAzimuth > viewCenter + viewSpan / 2)) return;
+      const pointX = x(point.azimuth);
+      const pointY = y(point.horizonElevation);
+      if (!started) { context.moveTo(pointX, pointY); started = true; }
+      else context.lineTo(pointX, pointY);
+    });
+    context.stroke();
+    context.setLineDash([]);
+  }
 
   context.fillStyle = muted;
   context.globalAlpha = 0.12;
@@ -468,9 +528,10 @@ function drawChart() {
   }
   context.setLineDash([]);
 
-  const azimuthLabels = ['0° N', '90° E', '180° S', '270° W', '360° N'];
+  const azimuthLabels = chartZoom
+    ? [-30, -15, 0, 15, 30].map(offset => Math.round((viewCenter + offset + 360) % 360) + '°')
+    : ['0° N', '90° E', '180° S', '270° W', '360° N'];
   context.textAlign = 'center';
-  context.textBaseline = 'top';
   for (let index = 0; index < azimuthLabels.length; index += 1) {
     const position = plot.left + index / (azimuthLabels.length - 1) * (plot.right - plot.left);
     context.beginPath();
@@ -497,9 +558,9 @@ function drawChart() {
     for (let index = 1; index < rows.length; index += 1) {
       const previous = rows[index - 1];
       const row = rows[index];
-      const previousAzimuth = ((previous.azimuth % 360) + 360) % 360;
-      const azimuth = ((row.azimuth % 360) + 360) % 360;
-      if (Math.abs(azimuth - previousAzimuth) > 180) continue;
+      const previousAzimuth = relativeAzimuth(previous.azimuth);
+      const azimuth = relativeAzimuth(row.azimuth);
+      if (Math.abs(azimuth - previousAzimuth) > viewSpan / 2) continue;
 
       const start = { azimuth: previousAzimuth, elevation: previous.elevation };
       const end = { azimuth, elevation: row.elevation };
@@ -549,7 +610,25 @@ function drawChart() {
     context.stroke();
     context.globalAlpha = 1;
   }
+  drawTerrainHorizon();
 }
+
+canvas.addEventListener('click', event => {
+  if (!result?.rows.length) return;
+  const bounds = canvas.getBoundingClientRect();
+  const plotLeft = 58;
+  const plotRight = canvas.clientWidth - 18;
+  const clickAzimuth = chartZoom
+    ? chartZoom.center - 30 + (event.clientX - bounds.left - plotLeft) / (plotRight - plotLeft) * 60
+    : (event.clientX - bounds.left - plotLeft) / (plotRight - plotLeft) * 360;
+  const current = result.rows[currentIndex];
+  const angularDistance = azimuth => Math.abs(((azimuth - clickAzimuth + 540) % 360) - 180);
+  if (chartZoom) chartZoom = undefined;
+  else if (angularDistance(current.sun.azimuth) <= 8) chartZoom = { center: current.sun.azimuth };
+  else if (angularDistance(current.earth.azimuth) <= 8) chartZoom = { center: current.earth.azimuth };
+  else return;
+  drawChart();
+});
 
 function elevationAt(time, rows) {
   if (time <= Date.parse(rows[0].time)) return rows[0].elevation;
@@ -564,16 +643,36 @@ function elevationAt(time, rows) {
   return rows[rows.length - 1].elevation;
 }
 
+function terrainHorizonAt(time, target) {
+  if (!result.terrain?.horizons?.length) return 0;
+  const rows = result.rows;
+  const firstTerrain = terrainAtAzimuth(result.terrain.horizons, rows[0][target].azimuth);
+  if (time <= Date.parse(rows[0].time)) {
+    return firstTerrain?.horizonElevation ?? 0;
+  }
+  for (let index = 1; index < rows.length; index += 1) {
+    const before = Date.parse(rows[index - 1].time);
+    const after = Date.parse(rows[index].time);
+    if (time <= after) {
+      const progress = (time - before) / (after - before);
+      const first = terrainAtAzimuth(result.terrain.horizons, rows[index - 1][target].azimuth)?.horizonElevation ?? 0;
+      const last = terrainAtAzimuth(result.terrain.horizons, rows[index][target].azimuth)?.horizonElevation ?? 0;
+      return first + (last - first) * progress;
+    }
+  }
+  return terrainAtAzimuth(result.terrain.horizons, rows[rows.length - 1][target].azimuth)?.horizonElevation ?? 0;
+}
+
 function updateVisibility(params) {
   const start = Date.parse(params.get('start') + ':00Z');
   const stop = Date.parse(params.get('stop') + ':00Z');
-  const updateTargetVisibility = (target, rows, pie, value, duration) => {
+  const updateTargetVisibility = (label, target, rows, pie, value, duration) => {
     const times = [start, ...rows.map(row => Date.parse(row.time)).filter(time => time > start && time < stop), stop];
     let above = 0;
     for (let index = 1; index < times.length; index += 1) {
       const interval = times[index] - times[index - 1];
-      const first = elevationAt(times[index - 1], rows);
-      const last = elevationAt(times[index], rows);
+      const first = elevationAt(times[index - 1], rows) - terrainHorizonAt(times[index - 1], target);
+      const last = elevationAt(times[index], rows) - terrainHorizonAt(times[index], target);
       if (first > 0 && last > 0) above += interval;
       else if (first > 0 && last <= 0) above += interval * first / (first - last);
       else if (first <= 0 && last > 0) above += interval * last / (last - first);
@@ -581,15 +680,15 @@ function updateVisibility(params) {
     const percentage = above / (stop - start) * 100;
     const rounded = Math.round(percentage);
     pie.style.background = 'conic-gradient(var(--visibility-color) ' + percentage + '%, var(--edge) 0)';
-    pie.setAttribute('aria-label', target + ' above horizon ' + rounded + '%');
+    pie.setAttribute('aria-label', label + ' above terrain horizon ' + rounded + '%');
     value.textContent = rounded + '%';
     const hours = above / 3_600_000;
     duration.textContent = hours < 1
       ? Math.round(above / 60_000) + ' min'
       : hours.toFixed(1) + ' hr';
   };
-  updateTargetVisibility('Sun', result.sun.rows, sunVisibilityPie, sunVisibilityValue, sunVisibilityDuration);
-  updateTargetVisibility('Earth', result.earth.rows, earthVisibilityPie, earthVisibilityValue, earthVisibilityDuration);
+  updateTargetVisibility('Sun', 'sun', result.sun.rows, sunVisibilityPie, sunVisibilityValue, sunVisibilityDuration);
+  updateTargetVisibility('Earth', 'earth', result.earth.rows, earthVisibilityPie, earthVisibilityValue, earthVisibilityDuration);
 }
 
 function updateCurrentReading() {
@@ -658,10 +757,8 @@ function renderResult(payload, params) {
   empty.hidden = true;
   data.hidden = false;
   status.textContent = 'Loaded Sun and Earth ephemerides for ' + result.rows.length + ' matching time samples.';
-  const terrainRows = result.terrain?.results;
-  terrainStatus.textContent = terrainRows
-    ? 'Terrain profile: ' + terrainRows.reduce((count, row) => count + Number(row.sun.obstructed) + Number(row.earth.obstructed), 0) +
-      ' of ' + terrainRows.length * 2 + ' Sun/Earth samples blocked by terrain.'
+  terrainStatus.textContent = result.terrain?.horizons
+    ? 'Terrain horizon: ' + result.terrain.horizons.length + ' azimuth samples around the site.'
     : 'Terrain profile unavailable: ' + (result.terrainError ?? 'Moon Trek did not return elevation data.') +
       ' Increase the observation step size and try again.';
   download.disabled = false;
@@ -699,7 +796,6 @@ form.addEventListener('submit', async event => {
     const combined = combineResults(sun, earth);
     const terrainParams = new URLSearchParams({
       latitude: params.get('latitude'), longitude: params.get('longitude'), altitude: params.get('altitude'),
-      rows: JSON.stringify(combined.rows)
     });
     const terrainResponse = await fetch('/api/terrain?' + terrainParams);
     const terrainPayload = await terrainResponse.json();
@@ -725,11 +821,12 @@ slider.addEventListener('input', () => {
 });
 download.addEventListener('click', () => {
   const rows = result.rows.map(({ time, sun, earth }, index) => {
-    const terrain = result.terrain?.results?.[index];
+    const sunTerrain = result.terrain ? terrainAtAzimuth(result.terrain.horizons, sun.azimuth) : undefined;
+    const earthTerrain = result.terrain ? terrainAtAzimuth(result.terrain.horizons, earth.azimuth) : undefined;
     return [time, sun.azimuth, sun.elevation,
-      terrain?.sun.horizonElevation ?? '', terrain?.sun.obstructed ?? '',
+      sunTerrain?.horizonElevation ?? '', sunTerrain ? sun.elevation >= 0 && sun.elevation <= sunTerrain.horizonElevation : '',
       earth.azimuth, earth.elevation,
-      terrain?.earth.horizonElevation ?? '', terrain?.earth.obstructed ?? ''].join(',');
+      earthTerrain?.horizonElevation ?? '', earthTerrain ? earth.elevation >= 0 && earth.elevation <= earthTerrain.horizonElevation : ''].join(',');
   });
   const csv = ['timestamp_utc,sun_azimuth_deg,sun_elevation_deg,sun_terrain_horizon_deg,sun_terrain_blocked,earth_azimuth_deg,earth_elevation_deg,earth_terrain_horizon_deg,earth_terrain_blocked',
     ...rows].join('\n') + '\n';

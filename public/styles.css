@@ -101,6 +101,7 @@ input:hover, select:hover { border-color: #575960; }
 #data { margin-top: 20px; }
 .chart-head { display: flex; justify-content: space-between; gap: 7px; align-items: center; flex-wrap: wrap; }
 .chart-head h3 { font-size: .97rem; font-weight: 600; }
+.chart-instruction { margin-top: 5px; color: var(--muted); font: .72rem var(--mono); }
 .sky-legend { display: flex; align-items: center; gap: 14px; color: var(--muted); font: .8rem var(--mono); }
 .sky-legend .sun-color::before, .sky-legend .earth-color::before { width: 9px; height: 9px; }
 .sun-color, .earth-color { display: inline-flex; align-items: center; gap: 6px; }
@@ -108,6 +109,7 @@ input:hover, select:hover { border-color: #575960; }
 .earth-color::before { background: var(--moonlight); }
 .sky-view { display: grid; grid-template-columns: minmax(0, 1fr) 180px; align-items: center; gap: 16px; }
 #chart { display: block; width: 100%; height: 270px; }
+#chart { cursor: crosshair; }
 .visibility { display: grid; gap: 10px; text-align: center; }
 .visibility h3 { font-size: .76rem; font-weight: 600; }
 .visibility-items { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
