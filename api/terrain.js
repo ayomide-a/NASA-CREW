@@ -1,6 +1,6 @@
 const endpoint = 'https://trek.nasa.gov/moon/trekarcgis/rest/services/LRO_LOLA_DEM_Global_256ppd_v06/ImageServer/getSamples';
 const moonRadius = 1_737_400;
-const directionCount = 72;
+const directionCount = 36;
 const samplesPerDirection = 100;
 const rangeMeters = 100_000;
 const concurrency = 6;
