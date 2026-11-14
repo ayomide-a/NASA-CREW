@@ -1,0 +1,58 @@
+name: Deploy production
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: moonwalkers9-production
+  cancel-in-progress: true
+
+env:
+  VERCEL_ORG_ID: team_IipLFmC1bGRK1ExFUNgRDfJI
+  VERCEL_PROJECT_ID: prj_eus0Mp8BJk83etPMpqunUzFgqSvk
+  VERCEL_SCOPE: chibuikeods-projects
+
+jobs:
+  production:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: production
+      url: https://moonwalkers9.vercel.app
+    steps:
+      - name: Check out main
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@52.2.0
+
+      - name: Pull Vercel production settings
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          if [[ -z "$VERCEL_TOKEN" ]]; then
+            echo "::error::Add VERCEL_TOKEN as a GitHub Actions secret for this repository or the production environment."
+            exit 1
+          fi
+          vercel pull --yes --environment=production --scope "$VERCEL_SCOPE"
+
+      - name: Build production
+        run: vercel build --prod
+
+      - name: Deploy production
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          vercel deploy --prebuilt --prod --scope "$VERCEL_SCOPE" --yes --non-interactive --meta "githubCommitRef=main" --meta "githubCommitSha=$GITHUB_SHA"
+          printf 'Production: https://moonwalkers9.vercel.app\n' >> "$GITHUB_STEP_SUMMARY"
