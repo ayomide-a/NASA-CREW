@@ -82,6 +82,15 @@
             <label>Altitude (km)<input type="number" name="altitude" step="any" value="0" required></label>
           </fieldset>
           <fieldset>
+            <legend>Compare sites</legend>
+            <label class="compare-toggle"><input id="compare-enabled" name="compareEnabled" type="checkbox">Compare with a second site</label>
+            <div id="compare-coordinates" class="fields" hidden>
+              <label>Site B latitude (°)<input id="compare-latitude" name="compareLatitude" type="number" min="-90" max="90" step="any" required disabled></label>
+              <label>Site B longitude (° E)<input id="compare-longitude" name="compareLongitude" type="number" min="-180" max="360" step="any" required disabled></label>
+            </div>
+            <p class="field-hint">Both sites use the same altitude and observation window.</p>
+          </fieldset>
+          <fieldset>
             <legend>Time window <span class="unit-label">UTC</span></legend>
             <div class="dates">
               <label>Start time<input type="datetime-local" name="start" value="2026-11-14T00:00" required></label>
@@ -130,13 +139,15 @@
             <div class="sky-legend" aria-label="Chart targets">
               <span class="sun-color">Sun</span>
               <span class="earth-color">Earth</span>
+              <span class="site-key">Site A · solid</span>
+              <span id="site-b-key" class="site-key site-b-key" hidden>Site B · dashed</span>
             </div>
           </div>
-          <p class="chart-instruction">Click the Sun or Earth marker to zoom into its azimuth; click again to reset. The dashed gray line shows the terrain horizon.</p>
+          <p class="chart-instruction">Click a Sun or Earth marker to zoom into its azimuth; click again to reset. The gray line shows terrain horizons.</p>
           <div class="sky-view">
             <canvas id="chart" role="img" aria-label="Sun azimuth and elevation against the lunar terrain horizon."></canvas>
             <aside class="visibility" aria-label="Time above the terrain horizon">
-              <h3>Above terrain horizon</h3>
+              <h3>Site A · above terrain horizon</h3>
               <div class="visibility-items">
                 <div class="visibility-item">
                   <div id="sun-visibility-pie" class="visibility-pie sun-visibility" role="img" aria-label="Sun above horizon 0%"><span id="sun-visibility-value">0%</span></div>
@@ -149,6 +160,21 @@
                   <span id="earth-visibility-duration"></span>
                 </div>
               </div>
+              <div id="comparison-visibility" hidden>
+                <h3>Site B · above terrain horizon</h3>
+                <div class="visibility-items">
+                  <div class="visibility-item">
+                    <div id="compare-sun-visibility-pie" class="visibility-pie sun-visibility" role="img" aria-label="Site B Sun above horizon 0%"><span id="compare-sun-visibility-value">0%</span></div>
+                    <span class="sun-color">Sun</span>
+                    <span id="compare-sun-visibility-duration"></span>
+                  </div>
+                  <div class="visibility-item">
+                    <div id="compare-earth-visibility-pie" class="visibility-pie earth-visibility" role="img" aria-label="Site B Earth above horizon 0%"><span id="compare-earth-visibility-value">0%</span></div>
+                    <span class="earth-color">Earth</span>
+                    <span id="compare-earth-visibility-duration"></span>
+                  </div>
+                </div>
+              </div>
             </aside>
           </div>
           <div class="playback">
@@ -156,11 +182,22 @@
             <input id="time-slider" type="range" min="0" max="0" value="0" step="1" aria-label="Observation time">
             <output id="current-reading" for="time-slider" aria-live="polite"></output>
             <div class="playback-reading"><span id="selected-target-label" class="sun-color">Sun</span><output id="selected-reading"></output></div>
+            <div id="comparison-readings" class="comparison-readings" hidden>
+              <h3 id="comparison-site-label"></h3>
+              <div class="playback-readings">
+                <span class="sun-color">Sun <output id="compare-sun-reading"></output><small id="compare-sun-difference"></small></span>
+                <span class="earth-color">Earth <output id="compare-earth-reading"></output><small id="compare-earth-difference"></small></span>
+              </div>
+            </div>
           </div>
           <p class="note">Azimuth is measured clockwise from north. Elevation is relative to the local horizon; terrain can block the line of sight.</p>
           <p id="terrain-status" class="note">Terrain profile: not requested.</p>
+          <section id="site-recommendation" class="site-recommendation" aria-live="polite" hidden>
+            <h3 id="recommendation-title">Landing site recommendation</h3>
+            <p id="recommendation-details"></p>
+          </section>
           <div class="table-frame">
-            <table><thead><tr><th scope="col">Timestamp (UTC)</th><th scope="col">Sun azimuth (°)</th><th scope="col">Sun elevation (°)</th><th scope="col">Sun terrain</th><th scope="col">Earth azimuth (°)</th><th scope="col">Earth elevation (°)</th><th scope="col">Earth terrain</th></tr></thead><tbody></tbody></table>
+            <table><thead><tr><th scope="col">Timestamp (UTC)</th><th scope="col">Sun azimuth (°)</th><th scope="col">Sun elevation (°)</th><th scope="col">Sun terrain</th><th scope="col">Earth azimuth (°)</th><th scope="col">Earth elevation (°)</th><th scope="col">Earth terrain</th><th class="comparison-column" scope="col" hidden>Site B Sun azimuth (°)</th><th class="comparison-column" scope="col" hidden>Site B Sun elevation (°)</th><th class="comparison-column" scope="col" hidden>Site B Sun terrain</th><th class="comparison-column" scope="col" hidden>Site B Earth azimuth (°)</th><th class="comparison-column" scope="col" hidden>Site B Earth elevation (°)</th><th class="comparison-column" scope="col" hidden>Site B Earth terrain</th></tr></thead><tbody></tbody></table>
           </div>
           <div class="paging"><button type="button" id="previous">← Previous</button><span id="range" aria-live="polite"></span><button type="button" id="next">Next →</button></div>
         </div>
