@@ -22,6 +22,7 @@ const sunVisibilityValue = document.querySelector('#sun-visibility-value');
 const earthVisibilityValue = document.querySelector('#earth-visibility-value');
 const sunVisibilityDuration = document.querySelector('#sun-visibility-duration');
 const earthVisibilityDuration = document.querySelector('#earth-visibility-duration');
+const terrainStatus = document.querySelector('#terrain-status');
 const mapElement = document.querySelector('#map');
 const mapCoordinates = document.querySelector('#map-coordinates');
 const mapViewSelect = document.querySelector('#map-view');
@@ -231,14 +232,17 @@ updateMarkerFromInputs();
 function renderTable() {
   const start = page * pageSize;
   const end = Math.min(start + pageSize, result.rows.length);
-  const items = result.rows.slice(start, end).map(({ time, sun, earth }) => {
+  const items = result.rows.slice(start, end).map(({ time, sun, earth }, index) => {
     const row = document.createElement('tr');
+    const terrain = result.terrain?.results?.[start + index];
     for (const value of [
       time.slice(0, 16).replace('T', ' '),
       sun.azimuth.toFixed(6),
       sun.elevation.toFixed(6),
+      terrain ? (terrain.sun.obstructed ? 'Blocked' : 'Clear') + ' · horizon ' + terrain.sun.horizonElevation.toFixed(2) + '°' : 'Unavailable',
       earth.azimuth.toFixed(6),
-      earth.elevation.toFixed(6)
+      earth.elevation.toFixed(6),
+      terrain ? (terrain.earth.obstructed ? 'Blocked' : 'Clear') + ' · horizon ' + terrain.earth.horizonElevation.toFixed(2) + '°' : 'Unavailable'
     ]) {
       const cell = row.insertCell();
       cell.textContent = value;
@@ -482,6 +486,12 @@ function renderResult(payload, params) {
   empty.hidden = true;
   data.hidden = false;
   status.textContent = 'Loaded Sun and Earth ephemerides for ' + result.rows.length + ' matching time samples.';
+  const terrainRows = result.terrain?.results;
+  terrainStatus.textContent = terrainRows
+    ? 'Terrain profile: ' + terrainRows.reduce((count, row) => count + Number(row.sun.obstructed) + Number(row.earth.obstructed), 0) +
+      ' of ' + terrainRows.length * 2 + ' Sun/Earth samples blocked by terrain.'
+    : 'Terrain profile unavailable: ' + (result.terrainError ?? 'Moon Trek did not return elevation data.') +
+      ' Increase the observation step size and try again.';
   download.disabled = false;
   renderTable();
   updateVisibility(params);
@@ -515,7 +525,16 @@ form.addEventListener('submit', async event => {
     const sun = await fetchTarget(params, 'sun');
     status.textContent = 'Sun data stored. Requesting Earth ephemeris from JPL Horizons…';
     const earth = await fetchTarget(params, 'earth');
-    renderResult(combineResults(sun, earth), params);
+    const combined = combineResults(sun, earth);
+    const terrainParams = new URLSearchParams({
+      latitude: params.get('latitude'), longitude: params.get('longitude'), altitude: params.get('altitude'),
+      rows: JSON.stringify(combined.rows)
+    });
+    const terrainResponse = await fetch('/api/terrain?' + terrainParams);
+    const terrainPayload = await terrainResponse.json();
+    if (terrainResponse.ok) combined.terrain = terrainPayload;
+    else combined.terrainError = terrainPayload.error ?? 'Moon Trek did not return elevation data.';
+    renderResult(combined, params);
   } catch (error) {
     status.textContent = error instanceof SyntaxError ? 'The service returned an unexpected response.' : error.message;
     status.classList.add('error');
@@ -536,10 +555,14 @@ slider.addEventListener('input', () => {
   updateCurrentReading();
 });
 download.addEventListener('click', () => {
-  const rows = result.rows.map(({ time, sun, earth }) => [
-    time, sun.azimuth, sun.elevation, earth.azimuth, earth.elevation
-  ].join(','));
-  const csv = ['timestamp_utc,sun_azimuth_deg,sun_elevation_deg,earth_azimuth_deg,earth_elevation_deg',
+  const rows = result.rows.map(({ time, sun, earth }, index) => {
+    const terrain = result.terrain?.results?.[index];
+    return [time, sun.azimuth, sun.elevation,
+      terrain?.sun.horizonElevation ?? '', terrain?.sun.obstructed ?? '',
+      earth.azimuth, earth.elevation,
+      terrain?.earth.horizonElevation ?? '', terrain?.earth.obstructed ?? ''].join(',');
+  });
+  const csv = ['timestamp_utc,sun_azimuth_deg,sun_elevation_deg,sun_terrain_horizon_deg,sun_terrain_blocked,earth_azimuth_deg,earth_elevation_deg,earth_terrain_horizon_deg,earth_terrain_blocked',
     ...rows].join('\n') + '\n';
   const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
   const link = document.createElement('a');
