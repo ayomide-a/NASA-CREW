@@ -88,8 +88,25 @@ const imageryLayers = {
     '30120'
   )
 };
+const polarDetailLayers = {
+  'north-pole': createImageryLayer(
+    'https://trek.nasa.gov/moon/trekarcgis/rest/services/LRO_LOLA_Shade_NPolar875_10m/ImageServer',
+    northPolarProjection,
+    '30118'
+  ),
+  'south-pole': createImageryLayer(
+    'https://trek.nasa.gov/moon/trekarcgis/rest/services/LRO_LOLA_Shade_SPolar875_10m/ImageServer',
+    southPolarProjection,
+    '30120'
+  )
+};
 imageryLayers['north-pole'].setVisible(false);
 imageryLayers['south-pole'].setVisible(false);
+for (const layer of Object.values(polarDetailLayers)) {
+  layer.setVisible(false);
+  layer.setOpacity(0.45);
+  layer.setMaxResolution(80);
+}
 
 function createMapView(name) {
   const projection = name === 'north-pole' ? northPolarProjection :
@@ -112,6 +129,8 @@ const lunarMap = new ol.Map({
     imageryLayers.global,
     imageryLayers['north-pole'],
     imageryLayers['south-pole'],
+    polarDetailLayers['north-pole'],
+    polarDetailLayers['south-pole'],
     new ol.layer.Vector({
       source: markerSource,
       style: [
@@ -192,6 +211,9 @@ function updateMarkerFromInputs() {
 
 mapViewSelect.addEventListener('change', () => {
   for (const [name, layer] of Object.entries(imageryLayers)) {
+    layer.setVisible(name === mapViewSelect.value);
+  }
+  for (const [name, layer] of Object.entries(polarDetailLayers)) {
     layer.setVisible(name === mapViewSelect.value);
   }
   lunarMap.setView(createMapView(mapViewSelect.value));
