@@ -9,6 +9,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@9.2.4/ol.css">
+  <script src="https://cdn.jsdelivr.net/npm/ol@9.2.4/dist/ol.js"></script>
   <script src="/app.js" type="module"></script>
 </head>
 <body>
@@ -25,6 +27,26 @@
         <h1>Lunar Ephemeris<br>Explorer<span>.</span></h1>
         <p>Track the Sun or Earth from any site on the Moon using NASA JPL Horizons.</p>
       </div>
+    </section>
+
+    <section class="panel map-panel" aria-labelledby="map-heading">
+      <div class="map-heading">
+        <div>
+          <h2 id="map-heading">Choose a lunar landing site</h2>
+          <p>Click or tap the Moon to set your observation coordinates.</p>
+        </div>
+        <div class="map-tools">
+          <label for="map-view">Map view</label>
+          <select id="map-view">
+            <option value="global">Global</option>
+            <option value="north-pole">North pole</option>
+            <option value="south-pole">South pole</option>
+          </select>
+          <output id="map-coordinates" aria-live="polite">Lat −89.000° · Lon 0.000° E</output>
+        </div>
+      </div>
+      <div id="map" role="application" aria-label="Interactive lunar surface map. Click to select a landing site; drag to pan and use the controls to zoom."></div>
+      <p class="map-attribution">LRO Wide Angle Camera mosaics · <a href="https://trek.nasa.gov/moon/" target="_blank" rel="noopener">NASA Moon Trek</a></p>
     </section>
 
     <div class="workspace">

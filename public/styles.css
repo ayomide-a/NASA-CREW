@@ -38,6 +38,20 @@ h1, h2, h3, p { margin: 0; }
 h1 { margin-block: 14px; font-size: clamp(3rem, 6vw, 6.05rem); font-weight: 600; line-height: .94; letter-spacing: -.08em; }
 h1 span { color: var(--accent); }
 .hero p { margin-top: 20px; color: var(--muted); max-width: 460px; line-height: 1.5; }
+.map-panel { overflow: hidden; margin-bottom: 20px; }
+.map-heading { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 21px 24px; }
+.map-heading p { margin-top: 5px; color: var(--muted); font-size: .86rem; }
+.map-tools { display: flex; align-items: center; gap: 9px; }
+.map-tools label { display: block; white-space: nowrap; }
+.map-tools select { width: auto; min-width: 128px; }
+#map-coordinates { flex: 0 0 auto; padding: 9px 12px; border: 1px solid var(--edge); border-radius: 7px; color: var(--accent); background: var(--input); font: .78rem var(--mono); }
+#map { width: 100%; height: clamp(460px, 68vh, 760px); background: radial-gradient(ellipse at center, #282727, #111315 75%); }
+.map-attribution { padding: 9px 24px; border-top: 1px solid var(--edge); color: var(--muted); font: .66rem var(--mono); text-align: right; }
+.map-attribution a { color: var(--moonlight); }
+.map-attribution a:hover { text-decoration: underline; }
+.ol-control button { color: var(--ink); background: #17191c; }
+.ol-control button:hover, .ol-control button:focus { background: #2d3034; }
+.ol-control { background: rgb(16 17 19 / 75%); }
 .workspace { display: grid; grid-template-columns: minmax(295px, 365px) minmax(0, 1fr); gap: 20px; align-items: start; }
 .panel { background: var(--panel); border: 1px solid var(--edge); border-radius: 14px; min-width: 0; }
 .query { padding: 24px; }
@@ -104,6 +118,11 @@ footer { margin-top: 24px; padding-block: 18px 26px; color: var(--muted); font: 
   .hero { min-height: 0; padding-block: 36px; }
   .hero-art { inset-inline-start: 39%; opacity: .57; }
   .hero p { max-width: 305px; }
+  .map-panel { margin-bottom: 13px; }
+  .map-heading { align-items: flex-start; flex-direction: column; padding: 18px; }
+  .map-tools { flex-wrap: wrap; }
+  #map { height: clamp(360px, 56vh, 560px); }
+  .map-attribution { padding-inline: 18px; }
   .workspace { grid-template-columns: minmax(0, 1fr); gap: 13px; }
   .results { min-height: 0; }
   #empty { min-height: 270px; }

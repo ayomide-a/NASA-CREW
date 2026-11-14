@@ -11,10 +11,188 @@ const range = document.querySelector('#range');
 const table = document.querySelector('tbody');
 const canvas = document.querySelector('#chart');
 const context = canvas.getContext('2d');
+const mapElement = document.querySelector('#map');
+const mapCoordinates = document.querySelector('#map-coordinates');
+const mapViewSelect = document.querySelector('#map-view');
+const latitudeInput = form.elements.namedItem('latitude');
+const longitudeInput = form.elements.namedItem('longitude');
 const pageSize = 8;
 let result;
 let page = 0;
 let displayedTarget;
+
+const lunarExtent = [-180, -90, 180, 90];
+const lunarProjection = new ol.proj.Projection({
+  code: 'EPSG:104903',
+  units: 'degrees',
+  extent: lunarExtent
+});
+const northPolarExtent = [-1095700, -1095600, 1095600, 1095700];
+const northPolarProjection = new ol.proj.Projection({
+  code: 'EPSG:30118',
+  units: 'm',
+  extent: northPolarExtent
+});
+const southPolarProjection = new ol.proj.Projection({
+  code: 'EPSG:30120',
+  units: 'm',
+  extent: northPolarExtent
+});
+ol.proj.addProjection(lunarProjection);
+ol.proj.addProjection(northPolarProjection);
+ol.proj.addProjection(southPolarProjection);
+
+const markerSource = new ol.source.Vector();
+function createImageryLayer(url, projection, spatialReference) {
+  const source = new ol.source.ImageArcGISRest({
+    url,
+    projection,
+    params: {
+      format: 'jpgpng',
+      bboxSR: spatialReference,
+      imageSR: spatialReference
+    }
+  });
+  source.on('imageloaderror', () => {
+    mapCoordinates.textContent = 'Lunar imagery could not be loaded. You can still select coordinates.';
+  });
+  return new ol.layer.Image({ source });
+}
+
+const imageryLayers = {
+  global: createImageryLayer(
+    'https://trek.nasa.gov/moon/trekarcgis/rest/services/LRO_WAC_Mosaic_Global_303ppd_v02/ImageServer',
+    lunarProjection,
+    '104903'
+  ),
+  'north-pole': createImageryLayer(
+    'https://trek.nasa.gov/moon/trekarcgis/rest/services/LRO_WAC_Mosaic_NPole60_100m_v02/ImageServer',
+    northPolarProjection,
+    '30118'
+  ),
+  'south-pole': createImageryLayer(
+    'https://trek.nasa.gov/moon/trekarcgis/rest/services/LRO_WAC_Mosaic_SPole60_100m_v02/ImageServer',
+    southPolarProjection,
+    '30120'
+  )
+};
+imageryLayers['north-pole'].setVisible(false);
+imageryLayers['south-pole'].setVisible(false);
+
+function createMapView(name) {
+  const projection = name === 'north-pole' ? northPolarProjection :
+    name === 'south-pole' ? southPolarProjection : lunarProjection;
+  const extent = name === 'north-pole' || name === 'south-pole' ? northPolarExtent : lunarExtent;
+  const view = new ol.View({
+    projection,
+    center: [0, 0],
+    extent,
+    minZoom: 0,
+    maxZoom: 10
+  });
+  view.fit(extent, { size: [mapElement.clientWidth, mapElement.clientHeight] });
+  return view;
+}
+
+const lunarMap = new ol.Map({
+  target: mapElement,
+  layers: [
+    imageryLayers.global,
+    imageryLayers['north-pole'],
+    imageryLayers['south-pole'],
+    new ol.layer.Vector({
+      source: markerSource,
+      style: [
+        new ol.style.Style({
+          image: new ol.style.Circle({
+            radius: 11,
+            fill: new ol.style.Fill({ color: 'rgba(255, 195, 132, 0.2)' })
+          })
+        }),
+        new ol.style.Style({
+          image: new ol.style.Circle({
+            radius: 6,
+            fill: new ol.style.Fill({ color: '#ffc384' }),
+            stroke: new ol.style.Stroke({ color: '#101113', width: 2 })
+          })
+        })
+      ]
+    })
+  ],
+  view: createMapView('global')
+});
+
+const lunarRadius = 1737400;
+
+function eastLongitude(longitude) {
+  return ((longitude % 360) + 360) % 360;
+}
+
+function geographicToPolar(latitude, longitude, hemisphere) {
+  const latitudeRadians = latitude * Math.PI / 180;
+  const longitudeRadians = longitude * Math.PI / 180;
+  const angularDistance = hemisphere === 'north' ?
+    Math.PI / 2 - latitudeRadians : Math.PI / 2 + latitudeRadians;
+  const radius = 2 * lunarRadius * Math.tan(angularDistance / 2);
+  return [
+    radius * Math.sin(longitudeRadians),
+    (hemisphere === 'north' ? -1 : 1) * radius * Math.cos(longitudeRadians)
+  ];
+}
+
+function polarToGeographic([x, y], hemisphere) {
+  const angularDistance = 2 * Math.atan(Math.hypot(x, y) / (2 * lunarRadius));
+  const latitude = hemisphere === 'north' ?
+    Math.PI / 2 - angularDistance : -Math.PI / 2 + angularDistance;
+  const longitude = hemisphere === 'north' ? Math.atan2(x, -y) : Math.atan2(x, y);
+  return [longitude * 180 / Math.PI, latitude * 180 / Math.PI];
+}
+
+function updateSelectedSite(latitude, longitude) {
+  const longitudeEast = eastLongitude(longitude);
+  const mapLongitude = longitudeEast > 180 ? longitudeEast - 360 : longitudeEast;
+  latitudeInput.value = latitude.toFixed(6);
+  longitudeInput.value = longitudeEast.toFixed(6);
+  mapCoordinates.textContent = 'Lat ' + latitude.toFixed(3) + '° · Lon ' + longitudeEast.toFixed(3) + '° E';
+  markerSource.clear();
+  const mapView = mapViewSelect.value;
+  const coordinate = mapView === 'global' ? [mapLongitude, latitude] :
+    geographicToPolar(latitude, mapLongitude, mapView === 'north-pole' ? 'north' : 'south');
+  const extent = mapView === 'global' ? lunarExtent : northPolarExtent;
+  if (coordinate[0] >= extent[0] && coordinate[0] <= extent[2] &&
+      coordinate[1] >= extent[1] && coordinate[1] <= extent[3]) {
+    markerSource.addFeature(new ol.Feature(new ol.geom.Point(coordinate)));
+  }
+}
+
+function updateMarkerFromInputs() {
+  const latitude = Number(latitudeInput.value);
+  const longitude = Number(longitudeInput.value);
+  if (!latitudeInput.value.trim() || !longitudeInput.value.trim() ||
+      !Number.isFinite(latitude) || latitude < -90 || latitude > 90 ||
+      !Number.isFinite(longitude) || longitude < -180 || longitude > 360) {
+    markerSource.clear();
+    mapCoordinates.textContent = 'Enter valid coordinates to place the marker.';
+    return;
+  }
+  updateSelectedSite(latitude, longitude);
+}
+
+mapViewSelect.addEventListener('change', () => {
+  for (const [name, layer] of Object.entries(imageryLayers)) {
+    layer.setVisible(name === mapViewSelect.value);
+  }
+  lunarMap.setView(createMapView(mapViewSelect.value));
+  updateMarkerFromInputs();
+});
+lunarMap.on('singleclick', event => {
+  const [longitude, latitude] = mapViewSelect.value === 'global' ?
+    event.coordinate : polarToGeographic(event.coordinate, mapViewSelect.value === 'north-pole' ? 'north' : 'south');
+  updateSelectedSite(latitude, longitude);
+});
+latitudeInput.addEventListener('change', updateMarkerFromInputs);
+longitudeInput.addEventListener('change', updateMarkerFromInputs);
+updateMarkerFromInputs();
 
 function renderTable() {
   const start = page * pageSize;
