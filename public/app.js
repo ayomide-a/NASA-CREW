@@ -14,9 +14,14 @@ const context = canvas.getContext('2d');
 const slider = document.querySelector('#time-slider');
 const playback = document.querySelector('#playback');
 const reading = document.querySelector('#current-reading');
-const visibilityPie = document.querySelector('#visibility-pie');
-const visibilityValue = document.querySelector('#visibility-value');
-const visibilityDuration = document.querySelector('#visibility-duration');
+const sunReading = document.querySelector('#sun-reading');
+const earthReading = document.querySelector('#earth-reading');
+const sunVisibilityPie = document.querySelector('#sun-visibility-pie');
+const earthVisibilityPie = document.querySelector('#earth-visibility-pie');
+const sunVisibilityValue = document.querySelector('#sun-visibility-value');
+const earthVisibilityValue = document.querySelector('#earth-visibility-value');
+const sunVisibilityDuration = document.querySelector('#sun-visibility-duration');
+const earthVisibilityDuration = document.querySelector('#earth-visibility-duration');
 const mapElement = document.querySelector('#map');
 const mapCoordinates = document.querySelector('#map-coordinates');
 const mapViewSelect = document.querySelector('#map-view');
@@ -25,7 +30,6 @@ const longitudeInput = form.elements.namedItem('longitude');
 const pageSize = 8;
 let result;
 let page = 0;
-let displayedTarget;
 let currentIndex = 0;
 let playbackTimer;
 
@@ -205,9 +209,15 @@ updateMarkerFromInputs();
 function renderTable() {
   const start = page * pageSize;
   const end = Math.min(start + pageSize, result.rows.length);
-  const items = result.rows.slice(start, end).map(({ time, azimuth, elevation }) => {
+  const items = result.rows.slice(start, end).map(({ time, sun, earth }) => {
     const row = document.createElement('tr');
-    for (const value of [time.slice(0, 16).replace('T', ' '), azimuth.toFixed(6), elevation.toFixed(6)]) {
+    for (const value of [
+      time.slice(0, 16).replace('T', ' '),
+      sun.azimuth.toFixed(6),
+      sun.elevation.toFixed(6),
+      earth.azimuth.toFixed(6),
+      earth.elevation.toFixed(6)
+    ]) {
       const cell = row.insertCell();
       cell.textContent = value;
     }
@@ -228,42 +238,117 @@ function drawChart() {
   canvas.height = height * ratio;
   context.scale(ratio, ratio);
 
-  const elevation = result.rows[currentIndex].elevation;
-  const scale = Math.max(1, ...result.rows.map(row => Math.abs(row.elevation))) * 1.15;
-  const centerY = height / 2;
-  const extent = Math.max(24, centerY - 25);
-  const y = centerY - elevation / scale * extent;
   const style = getComputedStyle(document.documentElement);
   const muted = style.getPropertyValue('--muted').trim();
   const edge = style.getPropertyValue('--edge').trim();
-  const stroke = style.getPropertyValue(displayedTarget === 'sun' ? '--accent' : '--moonlight').trim();
+  const sunColor = style.getPropertyValue('--accent').trim();
+  const earthColor = style.getPropertyValue('--moonlight').trim();
+  const plot = { left: 58, right: width - 18, top: 18, bottom: height - 50 };
+  const x = azimuth => plot.left + (((azimuth % 360) + 360) % 360) / 360 * (plot.right - plot.left);
+  const y = elevation => plot.bottom - (elevation + 90) / 180 * (plot.bottom - plot.top);
+
+  context.fillStyle = muted;
+  context.globalAlpha = 0.12;
+  context.fillRect(plot.left, y(0), plot.right - plot.left, plot.bottom - y(0));
+  context.globalAlpha = 1;
+
   context.font = '11px monospace';
   context.fillStyle = muted;
   context.textBaseline = 'middle';
-  context.textAlign = 'left';
-  context.strokeStyle = muted;
-  context.setLineDash([4, 4]);
-  context.lineWidth = 1;
-  context.beginPath();
-  context.moveTo(38, centerY);
-  context.lineTo(width - 10, centerY);
-  context.stroke();
+  context.textAlign = 'right';
+  for (const elevation of [-90, -60, -30, 0, 30, 60, 90]) {
+    const position = y(elevation);
+    context.beginPath();
+    context.strokeStyle = elevation === 0 ? muted : edge;
+    context.setLineDash(elevation === 0 ? [4, 4] : []);
+    context.moveTo(plot.left, position);
+    context.lineTo(plot.right, position);
+    context.stroke();
+    context.fillText(elevation + '°', plot.left - 8, position);
+  }
   context.setLineDash([]);
 
-  context.fillText('+' + scale.toFixed(1) + '°', 3, 14);
-  context.fillText('0°', 10, centerY);
-  context.fillText('−' + scale.toFixed(1) + '°', 3, height - 14);
+  const azimuthLabels = ['0° N', '90° E', '180° S', '270° W', '360° N'];
+  context.textAlign = 'center';
+  context.textBaseline = 'top';
+  for (let index = 0; index < azimuthLabels.length; index += 1) {
+    const position = plot.left + index / (azimuthLabels.length - 1) * (plot.right - plot.left);
+    context.beginPath();
+    context.strokeStyle = edge;
+    context.moveTo(position, plot.top);
+    context.lineTo(position, plot.bottom);
+    context.stroke();
+    context.fillText(azimuthLabels[index], position, plot.bottom + 7);
+  }
+  context.fillStyle = muted;
+  context.fillText('Azimuth (clockwise from north)', (plot.left + plot.right) / 2, height - 17);
+  context.save();
+  context.translate(13, (plot.top + plot.bottom) / 2);
+  context.rotate(-Math.PI / 2);
+  context.fillText('Elevation', 0, 0);
+  context.restore();
 
-  context.beginPath();
-  context.arc(width * 0.57, y, 10, 0, 2 * Math.PI);
-  context.fillStyle = stroke;
-  context.shadowColor = stroke;
-  context.shadowBlur = 16;
-  context.fill();
-  context.shadowBlur = 0;
-  context.strokeStyle = edge;
-  context.lineWidth = 1;
-  context.stroke();
+  for (const [rows, color] of [[result.sun.rows, sunColor], [result.earth.rows, earthColor]]) {
+    const aboveSegments = [];
+    const belowSegments = [];
+    const addSegment = (segments, start, end) => {
+      segments.push([x(start.azimuth), y(start.elevation), x(end.azimuth), y(end.elevation)]);
+    };
+    for (let index = 1; index < rows.length; index += 1) {
+      const previous = rows[index - 1];
+      const row = rows[index];
+      const previousAzimuth = ((previous.azimuth % 360) + 360) % 360;
+      const azimuth = ((row.azimuth % 360) + 360) % 360;
+      if (Math.abs(azimuth - previousAzimuth) > 180) continue;
+
+      const start = { azimuth: previousAzimuth, elevation: previous.elevation };
+      const end = { azimuth, elevation: row.elevation };
+      const startsBelow = start.elevation < 0;
+      const endsBelow = end.elevation < 0;
+      if (startsBelow !== endsBelow && start.elevation !== 0 && end.elevation !== 0) {
+        const progress = -start.elevation / (end.elevation - start.elevation);
+        const crossing = {
+          azimuth: start.azimuth + (end.azimuth - start.azimuth) * progress,
+          elevation: 0
+        };
+        addSegment(startsBelow ? belowSegments : aboveSegments, start, crossing);
+        addSegment(endsBelow ? belowSegments : aboveSegments, crossing, end);
+      } else {
+        addSegment(startsBelow || endsBelow ? belowSegments : aboveSegments, start, end);
+      }
+    }
+
+    for (const [segments, opacity] of [[aboveSegments, 0.55], [belowSegments, 0.2]]) {
+      context.beginPath();
+      context.strokeStyle = color;
+      context.globalAlpha = opacity;
+      context.lineWidth = 1.5;
+      for (const [startX, startY, endX, endY] of segments) {
+        context.moveTo(startX, startY);
+        context.lineTo(endX, endY);
+      }
+      context.stroke();
+    }
+    context.globalAlpha = 1;
+  }
+
+  for (const [row, color] of [
+    [result.rows[currentIndex].sun, sunColor],
+    [result.rows[currentIndex].earth, earthColor]
+  ]) {
+    context.globalAlpha = row.elevation < 0 ? 0.35 : 1;
+    context.beginPath();
+    context.arc(x(row.azimuth), y(row.elevation), 7, 0, 2 * Math.PI);
+    context.fillStyle = color;
+    context.shadowColor = color;
+    context.shadowBlur = row.elevation < 0 ? 4 : 12;
+    context.fill();
+    context.shadowBlur = 0;
+    context.strokeStyle = edge;
+    context.lineWidth = 1;
+    context.stroke();
+    context.globalAlpha = 1;
+  }
 }
 
 function elevationAt(time, rows) {
@@ -280,38 +365,63 @@ function elevationAt(time, rows) {
 }
 
 function updateVisibility(params) {
-  const rows = result.rows;
   const start = Date.parse(params.get('start') + ':00Z');
   const stop = Date.parse(params.get('stop') + ':00Z');
-  const times = [start, ...rows.map(row => Date.parse(row.time)).filter(time => time > start && time < stop), stop];
-  let above = 0;
-  for (let index = 1; index < times.length; index += 1) {
-    const duration = times[index] - times[index - 1];
-    const first = elevationAt(times[index - 1], rows);
-    const last = elevationAt(times[index], rows);
-    if (first > 0 && last > 0) above += duration;
-    else if (first > 0 && last <= 0) above += duration * first / (first - last);
-    else if (first <= 0 && last > 0) above += duration * last / (last - first);
-  }
-  const percentage = above / (stop - start) * 100;
-  const rounded = Math.round(percentage);
-  visibilityPie.style.background = 'conic-gradient(var(--accent) ' + percentage + '%, var(--edge) 0)';
-  visibilityPie.setAttribute('aria-label', rounded + '% of selected time above the horizon');
-  visibilityValue.textContent = rounded + '%';
-  const hours = above / 3_600_000;
-  visibilityDuration.textContent = hours < 1
-    ? Math.round(above / 60_000) + ' min'
-    : hours.toFixed(1) + ' hr';
+  const updateTargetVisibility = (target, rows, pie, value, duration) => {
+    const times = [start, ...rows.map(row => Date.parse(row.time)).filter(time => time > start && time < stop), stop];
+    let above = 0;
+    for (let index = 1; index < times.length; index += 1) {
+      const interval = times[index] - times[index - 1];
+      const first = elevationAt(times[index - 1], rows);
+      const last = elevationAt(times[index], rows);
+      if (first > 0 && last > 0) above += interval;
+      else if (first > 0 && last <= 0) above += interval * first / (first - last);
+      else if (first <= 0 && last > 0) above += interval * last / (last - first);
+    }
+    const percentage = above / (stop - start) * 100;
+    const rounded = Math.round(percentage);
+    pie.style.background = 'conic-gradient(var(--visibility-color) ' + percentage + '%, var(--edge) 0)';
+    pie.setAttribute('aria-label', target + ' above horizon ' + rounded + '%');
+    value.textContent = rounded + '%';
+    const hours = above / 3_600_000;
+    duration.textContent = hours < 1
+      ? Math.round(above / 60_000) + ' min'
+      : hours.toFixed(1) + ' hr';
+  };
+  updateTargetVisibility('Sun', result.sun.rows, sunVisibilityPie, sunVisibilityValue, sunVisibilityDuration);
+  updateTargetVisibility('Earth', result.earth.rows, earthVisibilityPie, earthVisibilityValue, earthVisibilityDuration);
 }
 
 function updateCurrentReading() {
   currentIndex = Number(slider.value);
-  const row = result.rows[currentIndex];
-  reading.textContent = row.time.slice(0, 16).replace('T', ' ') + ' UTC · ' + row.elevation.toFixed(2) + '°';
-  slider.setAttribute('aria-valuetext', row.time.slice(0, 16).replace('T', ' ') + ' UTC, ' + row.elevation.toFixed(2) + ' degrees');
-  canvas.setAttribute('aria-label', row.elevation.toFixed(2) + ' degrees ' +
-    (row.elevation >= 0 ? 'above' : 'below') + ' the horizon at ' + row.time + '.');
+  const { time, sun, earth } = result.rows[currentIndex];
+  const timeLabel = time.slice(0, 16).replace('T', ' ') + ' UTC';
+  reading.textContent = timeLabel;
+  sunReading.textContent = sun.azimuth.toFixed(1) + '° az · ' + sun.elevation.toFixed(1) + '° el';
+  earthReading.textContent = earth.azimuth.toFixed(1) + '° az · ' + earth.elevation.toFixed(1) + '° el';
+  slider.setAttribute('aria-valuetext', timeLabel + ', Sun azimuth ' + sun.azimuth.toFixed(1) +
+    ' degrees, elevation ' + sun.elevation.toFixed(1) + ' degrees; Earth azimuth ' +
+    earth.azimuth.toFixed(1) + ' degrees, elevation ' + earth.elevation.toFixed(1) + ' degrees');
+  canvas.setAttribute('aria-label', 'At ' + timeLabel + ', Sun azimuth ' + sun.azimuth.toFixed(1) +
+    ' degrees and elevation ' + sun.elevation.toFixed(1) + ' degrees; Earth azimuth ' +
+    earth.azimuth.toFixed(1) + ' degrees and elevation ' + earth.elevation.toFixed(1) + ' degrees.');
   drawChart();
+}
+
+function combineResults(sun, earth) {
+  if (sun.rows.length !== earth.rows.length ||
+      sun.rows.some((row, index) => row.time !== earth.rows[index].time)) {
+    throw new Error('Sun and Earth data returned different time samples. Try the observation again.');
+  }
+  return {
+    sun,
+    earth,
+    rows: sun.rows.map((sunRow, index) => ({
+      time: sunRow.time,
+      sun: sunRow,
+      earth: earth.rows[index]
+    }))
+  };
 }
 
 function stopPlayback() {
@@ -340,23 +450,30 @@ function startPlayback() {
 function renderResult(payload, params) {
   stopPlayback();
   result = payload;
-  displayedTarget = params.get('target');
   page = 0;
   currentIndex = 0;
-  slider.max = String(payload.rows.length - 1);
+  slider.max = String(result.rows.length - 1);
   slider.value = '0';
-  const target = displayedTarget === 'sun' ? 'Sun' : 'Earth';
   const site = params.get('latitude') + '°, ' + params.get('longitude') + '° E';
-  summary.textContent = target + ' · ' + site + ' · ' + payload.rows.length + ' samples';
-  document.querySelector('#raw').textContent = payload.raw;
+  summary.textContent = 'Sun + Earth · ' + site + ' · ' + result.rows.length + ' samples';
+  document.querySelector('#raw').textContent = 'SUN\n' + result.sun.raw + '\n\nEARTH\n' + result.earth.raw;
   empty.hidden = true;
   data.hidden = false;
-  status.textContent = 'Loaded ' + payload.rows.length + ' samples for ' + target + '.';
+  status.textContent = 'Loaded Sun and Earth ephemerides for ' + result.rows.length + ' matching time samples.';
   download.disabled = false;
   renderTable();
   updateVisibility(params);
   updateCurrentReading();
   if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) startPlayback();
+}
+
+async function fetchTarget(params, target) {
+  const query = new URLSearchParams(params);
+  query.set('target', target);
+  const response = await fetch('/api/horizons?' + query);
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.error ?? 'The ' + target + ' request failed.');
+  return payload;
 }
 
 form.addEventListener('submit', async event => {
@@ -366,17 +483,17 @@ form.addEventListener('submit', async event => {
   run.disabled = true;
   run.firstElementChild.textContent = 'Running observation…';
   status.classList.remove('error');
-  status.textContent = 'Requesting data from JPL Horizons…';
+  status.textContent = 'Requesting Sun ephemeris from JPL Horizons…';
   status.hidden = false;
   empty.hidden = true;
   data.hidden = true;
   download.disabled = true;
   summary.textContent = 'JPL Horizons · Observer ephemeris';
   try {
-    const response = await fetch('/api/horizons?' + params);
-    const payload = await response.json();
-    if (!response.ok) throw new Error(payload.error ?? 'The request failed.');
-    renderResult(payload, params);
+    const sun = await fetchTarget(params, 'sun');
+    status.textContent = 'Sun data stored. Requesting Earth ephemeris from JPL Horizons…';
+    const earth = await fetchTarget(params, 'earth');
+    renderResult(combineResults(sun, earth), params);
   } catch (error) {
     status.textContent = error instanceof SyntaxError ? 'The service returned an unexpected response.' : error.message;
     status.classList.add('error');
@@ -397,12 +514,15 @@ slider.addEventListener('input', () => {
   updateCurrentReading();
 });
 download.addEventListener('click', () => {
-  const rows = result.rows.map(row => [row.time, row.azimuth, row.elevation].join(','));
-  const csv = ['timestamp_utc,azimuth_deg,elevation_deg', ...rows].join('\n') + '\n';
+  const rows = result.rows.map(({ time, sun, earth }) => [
+    time, sun.azimuth, sun.elevation, earth.azimuth, earth.elevation
+  ].join(','));
+  const csv = ['timestamp_utc,sun_azimuth_deg,sun_elevation_deg,earth_azimuth_deg,earth_elevation_deg',
+    ...rows].join('\n') + '\n';
   const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
   const link = document.createElement('a');
   link.href = url;
-  link.download = 'moonwalkers-' + displayedTarget + '-ephemeris.csv';
+  link.download = 'moonwalkers-ephemeris.csv';
   document.body.append(link);
   link.click();
   link.remove();
