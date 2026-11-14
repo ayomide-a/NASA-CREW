@@ -30,7 +30,7 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
           if [[ -z "$VERCEL_TOKEN" ]]; then
-            echo "::error::Add the VERCEL_TOKEN secret to the dev-preview GitHub environment."
+            echo "::error::Add VERCEL_TOKEN as a GitHub Actions secret for this repository or the dev-preview environment."
             exit 1
           fi
 
@@ -60,11 +60,12 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: |
           set -euo pipefail
-          deployment="$(vercel deploy --prebuilt --target=preview --scope "$VERCEL_SCOPE" --yes --format=json --meta "githubCommitRef=dev" --meta "githubCommitSha=$GITHUB_SHA")"
+          deployment="$(vercel deploy --prebuilt --target=preview --scope "$VERCEL_SCOPE" --yes --non-interactive --format=json --meta "githubCommitRef=dev" --meta "githubCommitSha=$GITHUB_SHA")"
           deployment_url="$(node -e '
-            const { status, deployment } = JSON.parse(require("fs").readFileSync(0, "utf8"));
-            if (status !== "ok" || deployment?.readyState !== "READY" || deployment.target === "production") {
-              throw new Error("Preview deployment is not ready");
+            const result = JSON.parse(require("fs").readFileSync(0, "utf8"));
+            const deployment = result.deployment ?? result;
+            if (deployment.readyState !== "READY" || ![null, "preview"].includes(deployment.target)) {
+              throw new Error(`Expected a ready preview deployment. Got state ${deployment.readyState} and target ${deployment.target}.`);
             }
             const url = new URL(deployment.url);
             if (url.protocol !== "https:" || url.origin !== deployment.url || !url.hostname.endsWith(".vercel.app")) {
