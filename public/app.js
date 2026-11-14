@@ -11,6 +11,12 @@ const range = document.querySelector('#range');
 const table = document.querySelector('tbody');
 const canvas = document.querySelector('#chart');
 const context = canvas.getContext('2d');
+const slider = document.querySelector('#time-slider');
+const playback = document.querySelector('#playback');
+const reading = document.querySelector('#current-reading');
+const visibilityPie = document.querySelector('#visibility-pie');
+const visibilityValue = document.querySelector('#visibility-value');
+const visibilityDuration = document.querySelector('#visibility-duration');
 const mapElement = document.querySelector('#map');
 const mapCoordinates = document.querySelector('#map-coordinates');
 const mapViewSelect = document.querySelector('#map-view');
@@ -20,6 +26,8 @@ const pageSize = 8;
 let result;
 let page = 0;
 let displayedTarget;
+let currentIndex = 0;
+let playbackTimer;
 
 const lunarExtent = [-180, -90, 180, 90];
 const lunarProjection = new ol.proj.Projection({
@@ -214,78 +222,129 @@ function renderTable() {
 function drawChart() {
   const width = canvas.clientWidth;
   const height = canvas.clientHeight;
-  if (!context || !width || !result?.rows.length) return;
+  if (!context || !width || !height || !result?.rows.length) return;
   const ratio = window.devicePixelRatio || 1;
   canvas.width = width * ratio;
   canvas.height = height * ratio;
   context.scale(ratio, ratio);
 
-  const rows = result.rows;
-  const values = rows.map(row => row.elevation);
-  const min = Math.min(0, ...values);
-  const max = Math.max(0, ...values);
-  const padding = Math.max(0.25, (max - min) * 0.12);
-  const low = min - padding;
-  const high = max + padding;
-  const left = 47;
-  const right = width - 10;
-  const top = 19;
-  const bottom = height - 33;
-  const x = index => rows.length > 1 ? left + index / (rows.length - 1) * (right - left) : (left + right) / 2;
-  const y = value => bottom - (value - low) / (high - low) * (bottom - top);
-
+  const elevation = result.rows[currentIndex].elevation;
+  const scale = Math.max(1, ...result.rows.map(row => Math.abs(row.elevation))) * 1.15;
+  const centerY = height / 2;
+  const extent = Math.max(24, centerY - 25);
+  const y = centerY - elevation / scale * extent;
   const style = getComputedStyle(document.documentElement);
   const muted = style.getPropertyValue('--muted').trim();
+  const edge = style.getPropertyValue('--edge').trim();
   const stroke = style.getPropertyValue(displayedTarget === 'sun' ? '--accent' : '--moonlight').trim();
   context.font = '11px monospace';
   context.fillStyle = muted;
-  context.textAlign = 'right';
   context.textBaseline = 'middle';
-
-  for (const tick of [high, (high + low) / 2, low]) {
-    const position = y(tick);
-    context.strokeStyle = style.getPropertyValue('--edge').trim();
-    context.lineWidth = 1;
-    context.beginPath();
-    context.moveTo(left, position);
-    context.lineTo(right, position);
-    context.stroke();
-    context.fillText(tick.toFixed(1) + '°', left - 6, position);
-  }
-  context.beginPath();
+  context.textAlign = 'left';
   context.strokeStyle = muted;
   context.setLineDash([4, 4]);
-  context.moveTo(left, y(0));
-  context.lineTo(right, y(0));
+  context.lineWidth = 1;
+  context.beginPath();
+  context.moveTo(38, centerY);
+  context.lineTo(width - 10, centerY);
   context.stroke();
   context.setLineDash([]);
 
-  const indices = [...new Set([0, Math.floor((rows.length - 1) / 2), rows.length - 1])];
-  for (const index of indices) {
-    context.textAlign = index === 0 ? 'left' : index === rows.length - 1 ? 'right' : 'center';
-    const label = rows[index].time.slice(5, 16).replace('T', ' ');
-    const location = index === 0 ? left : index === rows.length - 1 ? right : x(index);
-    context.fillText(label, location, bottom + 20);
-  }
+  context.fillText('+' + scale.toFixed(1) + '°', 3, 14);
+  context.fillText('0°', 10, centerY);
+  context.fillText('−' + scale.toFixed(1) + '°', 3, height - 14);
 
   context.beginPath();
-  context.strokeStyle = stroke;
+  context.arc(width * 0.57, y, 10, 0, 2 * Math.PI);
   context.fillStyle = stroke;
-  context.lineWidth = 2;
-  if (rows.length === 1) {
-    context.arc(x(0), y(values[0]), 3, 0, 2 * Math.PI);
-    context.fill();
-  } else {
-    context.moveTo(x(0), y(values[0]));
-    values.slice(1).forEach((value, index) => context.lineTo(x(index + 1), y(value)));
-    context.stroke();
+  context.shadowColor = stroke;
+  context.shadowBlur = 16;
+  context.fill();
+  context.shadowBlur = 0;
+  context.strokeStyle = edge;
+  context.lineWidth = 1;
+  context.stroke();
+}
+
+function elevationAt(time, rows) {
+  if (time <= Date.parse(rows[0].time)) return rows[0].elevation;
+  for (let index = 1; index < rows.length; index += 1) {
+    const before = Date.parse(rows[index - 1].time);
+    const after = Date.parse(rows[index].time);
+    if (time <= after) {
+      const progress = (time - before) / (after - before);
+      return rows[index - 1].elevation + (rows[index].elevation - rows[index - 1].elevation) * progress;
+    }
   }
+  return rows[rows.length - 1].elevation;
+}
+
+function updateVisibility(params) {
+  const rows = result.rows;
+  const start = Date.parse(params.get('start') + ':00Z');
+  const stop = Date.parse(params.get('stop') + ':00Z');
+  const times = [start, ...rows.map(row => Date.parse(row.time)).filter(time => time > start && time < stop), stop];
+  let above = 0;
+  for (let index = 1; index < times.length; index += 1) {
+    const duration = times[index] - times[index - 1];
+    const first = elevationAt(times[index - 1], rows);
+    const last = elevationAt(times[index], rows);
+    if (first > 0 && last > 0) above += duration;
+    else if (first > 0 && last <= 0) above += duration * first / (first - last);
+    else if (first <= 0 && last > 0) above += duration * last / (last - first);
+  }
+  const percentage = above / (stop - start) * 100;
+  const rounded = Math.round(percentage);
+  visibilityPie.style.background = 'conic-gradient(var(--accent) ' + percentage + '%, var(--edge) 0)';
+  visibilityPie.setAttribute('aria-label', rounded + '% of selected time above the horizon');
+  visibilityValue.textContent = rounded + '%';
+  const hours = above / 3_600_000;
+  visibilityDuration.textContent = hours < 1
+    ? Math.round(above / 60_000) + ' min'
+    : hours.toFixed(1) + ' hr';
+}
+
+function updateCurrentReading() {
+  currentIndex = Number(slider.value);
+  const row = result.rows[currentIndex];
+  reading.textContent = row.time.slice(0, 16).replace('T', ' ') + ' UTC · ' + row.elevation.toFixed(2) + '°';
+  slider.setAttribute('aria-valuetext', row.time.slice(0, 16).replace('T', ' ') + ' UTC, ' + row.elevation.toFixed(2) + ' degrees');
+  canvas.setAttribute('aria-label', row.elevation.toFixed(2) + ' degrees ' +
+    (row.elevation >= 0 ? 'above' : 'below') + ' the horizon at ' + row.time + '.');
+  drawChart();
+}
+
+function stopPlayback() {
+  window.clearInterval(playbackTimer);
+  playbackTimer = undefined;
+  playback.textContent = 'Play';
+  playback.setAttribute('aria-pressed', 'false');
+}
+
+function startPlayback() {
+  if (playbackTimer) return;
+  if (currentIndex === result.rows.length - 1) slider.value = '0';
+  playback.textContent = 'Pause';
+  playback.setAttribute('aria-pressed', 'true');
+  updateCurrentReading();
+  playbackTimer = window.setInterval(() => {
+    if (currentIndex >= result.rows.length - 1) {
+      stopPlayback();
+      return;
+    }
+    slider.value = String(currentIndex + 1);
+    updateCurrentReading();
+  }, 250);
 }
 
 function renderResult(payload, params) {
+  stopPlayback();
   result = payload;
   displayedTarget = params.get('target');
   page = 0;
+  currentIndex = 0;
+  slider.max = String(payload.rows.length - 1);
+  slider.value = '0';
   const target = displayedTarget === 'sun' ? 'Sun' : 'Earth';
   const site = params.get('latitude') + '°, ' + params.get('longitude') + '° E';
   summary.textContent = target + ' · ' + site + ' · ' + payload.rows.length + ' samples';
@@ -295,11 +354,14 @@ function renderResult(payload, params) {
   status.textContent = 'Loaded ' + payload.rows.length + ' samples for ' + target + '.';
   download.disabled = false;
   renderTable();
-  drawChart();
+  updateVisibility(params);
+  updateCurrentReading();
+  if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) startPlayback();
 }
 
 form.addEventListener('submit', async event => {
   event.preventDefault();
+  stopPlayback();
   const params = new URLSearchParams(new FormData(form));
   run.disabled = true;
   run.firstElementChild.textContent = 'Running observation…';
@@ -326,6 +388,14 @@ form.addEventListener('submit', async event => {
 
 previous.addEventListener('click', () => { page -= 1; renderTable(); });
 next.addEventListener('click', () => { page += 1; renderTable(); });
+playback.addEventListener('click', () => {
+  if (playbackTimer) stopPlayback();
+  else startPlayback();
+});
+slider.addEventListener('input', () => {
+  stopPlayback();
+  updateCurrentReading();
+});
 download.addEventListener('click', () => {
   const rows = result.rows.map(row => [row.time, row.azimuth, row.elevation].join(','));
   const csv = ['timestamp_utc,azimuth_deg,elevation_deg', ...rows].join('\n') + '\n';
