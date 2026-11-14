@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Query NASA JPL Horizons for Sun and Earth azimuth and elevation from a site on the Moon.">
+  <title>Moonwalkers 9 — Lunar Ephemeris Explorer</title>
+  <link rel="icon" type="image/jpeg" href="/assets/moon.jpg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" type="module"></script>
+</head>
+<body>
+  <header class="shell top">
+    <a class="brand" href="/" aria-label="Moonwalkers 9 home"><span aria-hidden="true" class="brand-icon"></span>MOONWALKERS<span class="brand-number">/ 09</span></a>
+    <a class="docs" href="https://ssd-api.jpl.nasa.gov/doc/horizons.html" target="_blank" rel="noopener">JPL Horizons docs <span aria-hidden="true">↗</span></a>
+  </header>
+
+  <main class="shell">
+    <section class="hero">
+      <div class="hero-art" aria-hidden="true"><div class="orbit"></div><img src="/assets/moon.jpg" alt="" width="1024" height="1024"></div>
+      <div class="hero-copy">
+        <div class="kicker"><span></span> NASA SPACE APPS CHALLENGE</div>
+        <h1>Lunar Ephemeris<br>Explorer<span>.</span></h1>
+        <p>Track the Sun or Earth from any site on the Moon using NASA JPL Horizons.</p>
+      </div>
+    </section>
+
+    <div class="workspace">
+      <section class="panel query">
+        <h2>Observation setup</h2>
+        <form id="query-form">
+          <fieldset>
+            <legend>Target body</legend>
+            <div class="target-options">
+              <label><input type="radio" name="target" value="sun" checked><span><i class="sun-icon" aria-hidden="true">☉</i> Sun</span></label>
+              <label><input type="radio" name="target" value="earth"><span><i class="earth-icon" aria-hidden="true">⊕</i> Earth</span></label>
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend>Lunar site</legend>
+            <div class="fields">
+              <label>Latitude (°)<input type="number" name="latitude" min="-90" max="90" step="any" value="-89" required></label>
+              <label>Longitude (° E)<input type="number" name="longitude" min="-180" max="360" step="any" value="0" required></label>
+            </div>
+            <label>Altitude (km)<input type="number" name="altitude" step="any" value="0" required></label>
+          </fieldset>
+          <fieldset>
+            <legend>Time window <span class="unit-label">UTC</span></legend>
+            <div class="dates">
+              <label>Start time<input type="datetime-local" name="start" value="2026-11-14T00:00" required></label>
+              <label>Stop time<input type="datetime-local" name="stop" value="2026-11-16T00:00" required></label>
+            </div>
+            <div class="fields">
+              <label>Step size<input type="number" name="step" min="1" step="1" value="6" required></label>
+              <label>Unit<select name="unit"><option value="min">Minutes</option><option value="h" selected>Hours</option><option value="d">Days</option></select></label>
+            </div>
+          </fieldset>
+          <button class="run" type="submit"><span>Run observation</span><span aria-hidden="true">→</span></button>
+        </form>
+      </section>
+
+      <section class="panel results" aria-labelledby="results-heading">
+        <div class="result-head">
+          <div><h2 id="results-heading">Ephemeris results</h2><p id="summary">JPL Horizons <span>·</span> Observer ephemeris</p></div>
+          <button class="download" type="button" disabled>Download CSV <span aria-hidden="true">↓</span></button>
+        </div>
+        <p id="status" role="status" aria-live="polite" hidden></p>
+        <div id="empty">
+          <div class="empty-orbit" aria-hidden="true"><span></span></div>
+          <h3>No observations yet</h3>
+          <p>Run an observation to see the target’s elevation over time and its azimuth at every sample.</p>
+        </div>
+        <div id="data" hidden>
+          <div class="chart-head"><h3>Elevation over time</h3><span><i aria-hidden="true"></i> 0° horizontal plane</span></div>
+          <canvas id="chart" role="img" aria-label="Elevation in degrees over time. The accompanying table lists every value."></canvas>
+          <p class="note">Elevations are relative to the local horizontal plane. Terrain can block the line of sight.</p>
+          <div class="table-frame">
+            <table><thead><tr><th scope="col">Timestamp (UTC)</th><th scope="col">Azimuth (°)</th><th scope="col">Elevation (°)</th></tr></thead><tbody></tbody></table>
+          </div>
+          <div class="paging"><button type="button" id="previous">← Previous</button><span id="range" aria-live="polite"></span><button type="button" id="next">Next →</button></div>
+          <details><summary>Raw Horizons response</summary><pre id="raw" tabindex="0"></pre></details>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <footer class="shell"><span>Moonwalkers 9</span><a href="https://svs.gsfc.nasa.gov/5001/" target="_blank" rel="noopener">Moon mosaic by NASA’s Scientific Visualization Studio <span aria-hidden="true">↗</span></a></footer>
+</body>
+</html>
