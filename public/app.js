@@ -5,10 +5,6 @@ const empty = document.querySelector('#empty');
 const data = document.querySelector('#data');
 const summary = document.querySelector('#summary');
 const download = document.querySelector('.download');
-const previous = document.querySelector('#previous');
-const next = document.querySelector('#next');
-const range = document.querySelector('#range');
-const table = document.querySelector('tbody');
 const canvas = document.querySelector('#chart');
 const context = canvas.getContext('2d');
 const slider = document.querySelector('#time-slider');
@@ -26,13 +22,19 @@ const terrainStatus = document.querySelector('#terrain-status');
 const mapElement = document.querySelector('#map');
 const mapCoordinates = document.querySelector('#map-coordinates');
 const mapViewSelect = document.querySelector('#map-view');
+const poiCount = document.querySelector('#poi-count');
+const poiPicker = document.querySelector('#poi-picker');
+const poiOptions = document.querySelector('#poi-options');
+const poiStatus = document.querySelector('#poi-status');
 const latitudeInput = form.elements.namedItem('latitude');
 const longitudeInput = form.elements.namedItem('longitude');
-const pageSize = 8;
+const startInput = form.elements.namedItem('start');
+const stopInput = form.elements.namedItem('stop');
 let result;
-let page = 0;
 let currentIndex = 0;
 let playbackTimer;
+let pointsOfInterest = [];
+const selectedPoiIndexes = new Set();
 
 const lunarExtent = [-180, -90, 180, 90];
 const lunarProjection = new ol.proj.Projection({
@@ -56,6 +58,7 @@ ol.proj.addProjection(northPolarProjection);
 ol.proj.addProjection(southPolarProjection);
 
 const markerSource = new ol.source.Vector();
+const poiSource = new ol.source.Vector();
 function createImageryLayer(url, projection, spatialReference) {
   const source = new ol.source.ImageArcGISRest({
     url,
@@ -133,6 +136,32 @@ const lunarMap = new ol.Map({
     polarDetailLayers['north-pole'],
     polarDetailLayers['south-pole'],
     new ol.layer.Vector({
+      source: poiSource,
+      style: feature => [
+        new ol.style.Style({
+          image: new ol.style.Circle({
+            radius: 15,
+            fill: new ol.style.Fill({ color: 'rgba(188, 228, 247, 0.22)' }),
+            stroke: new ol.style.Stroke({ color: '#bce4f7', width: 2 })
+          })
+        }),
+        new ol.style.Style({
+          image: new ol.style.Circle({
+            radius: 5,
+            fill: new ol.style.Fill({ color: '#bce4f7' }),
+            stroke: new ol.style.Stroke({ color: '#101113', width: 2 })
+          }),
+          text: new ol.style.Text({
+            text: feature.get('mission'),
+            offsetY: -20,
+            font: '600 12px "DM Sans", sans-serif',
+            fill: new ol.style.Fill({ color: '#f4f1eb' }),
+            stroke: new ol.style.Stroke({ color: '#101113', width: 3 })
+          })
+        })
+      ]
+    }),
+    new ol.layer.Vector({
       source: markerSource,
       style: [
         new ol.style.Style({
@@ -180,16 +209,60 @@ function polarToGeographic([x, y], hemisphere) {
   return [longitude * 180 / Math.PI, latitude * 180 / Math.PI];
 }
 
-function updateSelectedSite(latitude, longitude) {
+function coordinateForSite(latitude, longitude, mapView) {
   const longitudeEast = eastLongitude(longitude);
   const mapLongitude = longitudeEast > 180 ? longitudeEast - 360 : longitudeEast;
+  return mapView === 'global' ? [mapLongitude, latitude] :
+    geographicToPolar(latitude, mapLongitude, mapView === 'north-pole' ? 'north' : 'south');
+}
+
+function utcDateTimeMilliseconds(value) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)) return NaN;
+  const milliseconds = Date.parse(value + ':00Z');
+  return Number.isFinite(milliseconds) && new Date(milliseconds).toISOString().slice(0, 16) === value
+    ? milliseconds
+    : NaN;
+}
+
+function siteDateTime(site) {
+  const time = site.time.trim().replace(/\s*UTC$/i, '');
+  return site.date.trim() + 'T' + time;
+}
+
+function updateObservationWindow(site) {
+  const currentStart = utcDateTimeMilliseconds(startInput.value);
+  const currentStop = utcDateTimeMilliseconds(stopInput.value);
+  const siteStart = siteDateTime(site);
+  const siteStartMilliseconds = utcDateTimeMilliseconds(siteStart);
+  if (!Number.isFinite(currentStart) || !Number.isFinite(currentStop) ||
+      currentStop <= currentStart || !Number.isFinite(siteStartMilliseconds)) {
+    poiStatus.classList.add('error');
+    poiStatus.hidden = false;
+    poiStatus.textContent = 'Could not set the site time. Enter a valid start and later stop time first.';
+    return;
+  }
+
+  const duration = currentStop - currentStart;
+  startInput.value = siteStart;
+  stopInput.value = new Date(siteStartMilliseconds + duration).toISOString().slice(0, 16);
+  poiStatus.classList.remove('error');
+  poiStatus.hidden = true;
+  poiStatus.textContent = '';
+}
+
+function selectPoiSite(site) {
+  updateSelectedSite(site.latitude, site.longitude);
+  updateObservationWindow(site);
+}
+
+function updateSelectedSite(latitude, longitude) {
+  const longitudeEast = eastLongitude(longitude);
   latitudeInput.value = latitude.toFixed(6);
   longitudeInput.value = longitudeEast.toFixed(6);
   mapCoordinates.textContent = 'Lat ' + latitude.toFixed(3) + '° · Lon ' + longitudeEast.toFixed(3) + '° E';
   markerSource.clear();
   const mapView = mapViewSelect.value;
-  const coordinate = mapView === 'global' ? [mapLongitude, latitude] :
-    geographicToPolar(latitude, mapLongitude, mapView === 'north-pole' ? 'north' : 'south');
+  const coordinate = coordinateForSite(latitude, longitudeEast, mapView);
   const extent = mapView === 'global' ? lunarExtent : northPolarExtent;
   if (coordinate[0] >= extent[0] && coordinate[0] <= extent[2] &&
       coordinate[1] >= extent[1] && coordinate[1] <= extent[3]) {
@@ -210,6 +283,118 @@ function updateMarkerFromInputs() {
   updateSelectedSite(latitude, longitude);
 }
 
+function updatePoiHighlights() {
+  const mapView = mapViewSelect.value;
+  const features = [...selectedPoiIndexes].map(index => {
+    const site = pointsOfInterest[index];
+    const feature = new ol.Feature(new ol.geom.Point(
+      coordinateForSite(site.latitude, site.longitude, mapView)
+    ));
+    feature.set('poiIndex', index);
+    feature.set('mission', site.mission);
+    return feature;
+  });
+  poiSource.clear();
+  poiSource.addFeatures(features);
+}
+
+function renderPoiOptions() {
+  const options = pointsOfInterest.map((site, index) => {
+    const label = document.createElement('label');
+    label.className = 'poi-option';
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.value = String(index);
+    checkbox.addEventListener('change', () => {
+      if (checkbox.checked) {
+        selectedPoiIndexes.add(index);
+        selectPoiSite(site);
+      } else {
+        selectedPoiIndexes.delete(index);
+      }
+      poiCount.textContent = selectedPoiIndexes.size + ' selected';
+      updatePoiHighlights();
+    });
+
+    const copy = document.createElement('span');
+    copy.className = 'poi-option-copy';
+    const mission = document.createElement('strong');
+    mission.textContent = site.mission;
+    const coordinates = document.createElement('small');
+    coordinates.textContent = site.latitude.toFixed(3) + '°, ' +
+      eastLongitude(site.longitude).toFixed(3) + '° E · ' + site.date + ' ' + site.time;
+    copy.append(mission, coordinates);
+    label.append(checkbox, copy);
+    return label;
+  });
+  if (!options.length) {
+    const emptyMessage = document.createElement('p');
+    emptyMessage.textContent = 'No sites configured. Add entries to public/data/points-of-interest.json.';
+    poiOptions.replaceChildren(emptyMessage);
+    return;
+  }
+  poiOptions.replaceChildren(...options);
+}
+
+function validatePointsOfInterest(payload) {
+  if (!Array.isArray(payload)) throw new Error('The JSON file must contain an array of sites.');
+  return payload.map((site, index) => {
+    const entry = 'Site ' + (index + 1);
+    if (!site || typeof site !== 'object' || Array.isArray(site)) {
+      throw new Error(entry + ' must be a JSON object.');
+    }
+    if (typeof site.mission !== 'string' || !site.mission.trim()) {
+      throw new Error(entry + ' needs a mission name.');
+    }
+    if (typeof site.latitude !== 'number' || !Number.isFinite(site.latitude) ||
+        site.latitude < -90 || site.latitude > 90) {
+      throw new Error(entry + ' latitude must be a number from -90 to 90.');
+    }
+    if (typeof site.longitude !== 'number' || !Number.isFinite(site.longitude) ||
+        site.longitude < -180 || site.longitude > 360) {
+      throw new Error(entry + ' longitude must be a number from -180 to 360.');
+    }
+    if (typeof site.date !== 'string' || !site.date.trim() ||
+        typeof site.time !== 'string' || !site.time.trim()) {
+      throw new Error(entry + ' needs date and time strings.');
+    }
+    const dateTime = site.date.trim() + 'T' + site.time.trim().replace(/\s*UTC$/i, '');
+    if (!Number.isFinite(utcDateTimeMilliseconds(dateTime))) {
+      throw new Error(entry + ' date and time must use YYYY-MM-DD and HH:mm UTC format.');
+    }
+    return {
+      mission: site.mission.trim(),
+      latitude: site.latitude,
+      longitude: site.longitude,
+      date: site.date.trim(),
+      time: site.time.trim()
+    };
+  });
+}
+
+async function loadPointsOfInterest() {
+  try {
+    const response = await fetch('/data/points-of-interest.json');
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    pointsOfInterest = validatePointsOfInterest(await response.json());
+    renderPoiOptions();
+    poiStatus.classList.remove('error');
+    poiStatus.hidden = true;
+    poiStatus.textContent = '';
+  } catch (error) {
+    const unavailable = document.createElement('p');
+    unavailable.textContent = 'Site list unavailable. See the status below.';
+    poiOptions.replaceChildren(unavailable);
+    poiStatus.classList.add('error');
+    poiStatus.hidden = false;
+    poiStatus.textContent = 'Could not load points of interest: ' + error.message;
+  }
+}
+
+document.addEventListener('click', event => {
+  if (poiPicker.open && !poiPicker.contains(event.target)) poiPicker.open = false;
+});
+
 mapViewSelect.addEventListener('change', () => {
   for (const [name, layer] of Object.entries(imageryLayers)) {
     layer.setVisible(name === mapViewSelect.value);
@@ -219,8 +404,22 @@ mapViewSelect.addEventListener('change', () => {
   }
   lunarMap.setView(createMapView(mapViewSelect.value));
   updateMarkerFromInputs();
+  updatePoiHighlights();
 });
 lunarMap.on('singleclick', event => {
+  let clickedPoi;
+  lunarMap.forEachFeatureAtPixel(event.pixel, feature => {
+    if (Number.isInteger(feature.get('poiIndex'))) {
+      clickedPoi = feature;
+      return true;
+    }
+    return undefined;
+  }, { hitTolerance: 8 });
+  if (clickedPoi) {
+    const site = pointsOfInterest[clickedPoi.get('poiIndex')];
+    selectPoiSite(site);
+    return;
+  }
   const [longitude, latitude] = mapViewSelect.value === 'global' ?
     event.coordinate : polarToGeographic(event.coordinate, mapViewSelect.value === 'north-pole' ? 'north' : 'south');
   updateSelectedSite(latitude, longitude);
@@ -228,32 +427,7 @@ lunarMap.on('singleclick', event => {
 latitudeInput.addEventListener('change', updateMarkerFromInputs);
 longitudeInput.addEventListener('change', updateMarkerFromInputs);
 updateMarkerFromInputs();
-
-function renderTable() {
-  const start = page * pageSize;
-  const end = Math.min(start + pageSize, result.rows.length);
-  const items = result.rows.slice(start, end).map(({ time, sun, earth }, index) => {
-    const row = document.createElement('tr');
-    const terrain = result.terrain?.results?.[start + index];
-    for (const value of [
-      time.slice(0, 16).replace('T', ' '),
-      sun.azimuth.toFixed(6),
-      sun.elevation.toFixed(6),
-      terrain ? (terrain.sun.obstructed ? 'Blocked' : 'Clear') + ' · horizon ' + terrain.sun.horizonElevation.toFixed(2) + '°' : 'Unavailable',
-      earth.azimuth.toFixed(6),
-      earth.elevation.toFixed(6),
-      terrain ? (terrain.earth.obstructed ? 'Blocked' : 'Clear') + ' · horizon ' + terrain.earth.horizonElevation.toFixed(2) + '°' : 'Unavailable'
-    ]) {
-      const cell = row.insertCell();
-      cell.textContent = value;
-    }
-    return row;
-  });
-  table.replaceChildren(...items);
-  range.textContent = (start + 1) + '–' + end + ' of ' + result.rows.length;
-  previous.disabled = page === 0;
-  next.disabled = end === result.rows.length;
-}
+loadPointsOfInterest();
 
 function drawChart() {
   const width = canvas.clientWidth;
@@ -476,13 +650,11 @@ function startPlayback() {
 function renderResult(payload, params) {
   stopPlayback();
   result = payload;
-  page = 0;
   currentIndex = 0;
   slider.max = String(result.rows.length - 1);
   slider.value = '0';
   const site = params.get('latitude') + '°, ' + params.get('longitude') + '° E';
   summary.textContent = 'Sun + Earth · ' + site + ' · ' + result.rows.length + ' samples';
-  document.querySelector('#raw').textContent = 'SUN\n' + result.sun.raw + '\n\nEARTH\n' + result.earth.raw;
   empty.hidden = true;
   data.hidden = false;
   status.textContent = 'Loaded Sun and Earth ephemerides for ' + result.rows.length + ' matching time samples.';
@@ -493,7 +665,6 @@ function renderResult(payload, params) {
     : 'Terrain profile unavailable: ' + (result.terrainError ?? 'Moon Trek did not return elevation data.') +
       ' Increase the observation step size and try again.';
   download.disabled = false;
-  renderTable();
   updateVisibility(params);
   updateCurrentReading();
   if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) startPlayback();
@@ -544,8 +715,6 @@ form.addEventListener('submit', async event => {
   }
 });
 
-previous.addEventListener('click', () => { page -= 1; renderTable(); });
-next.addEventListener('click', () => { page += 1; renderTable(); });
 playback.addEventListener('click', () => {
   if (playbackTimer) stopPlayback();
   else startPlayback();

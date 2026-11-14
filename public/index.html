@@ -24,7 +24,7 @@
       <div class="hero-art" aria-hidden="true"><div class="orbit"></div></div>
       <div class="hero-copy">
         <div class="kicker"><span></span> NASA SPACE APPS CHALLENGE</div>
-        <h1>Lunar Ephemeris<br>Explorer<span>.</span></h1>
+        <h1>Lunar Ephemeris Explorer<span>.</span></h1>
         <p>Track the Sun and Earth from any site on the Moon using NASA JPL Horizons.</p>
       </div>
     </section>
@@ -33,19 +33,30 @@
       <div class="map-heading">
         <div>
           <h2 id="map-heading">Choose a lunar landing site</h2>
-          <p>Click or tap the Moon to set your observation coordinates.</p>
+          <p>Click the Moon to set coordinates, or select sites below to highlight them.</p>
         </div>
-        <div class="map-tools">
-          <label for="map-view">Map view</label>
-          <select id="map-view">
-            <option value="global">Global</option>
-            <option value="north-pole">North pole</option>
-            <option value="south-pole">South pole</option>
-          </select>
-          <output id="map-coordinates" aria-live="polite">Lat −89.000° · Lon 0.000° E</output>
+        <div class="map-actions">
+          <div class="poi-control">
+            <details id="poi-picker" class="poi-picker">
+              <summary><span>Points of interest</span><span id="poi-count">0 selected</span></summary>
+              <div id="poi-options" class="poi-options" role="group" aria-label="Select points of interest">
+                <p>Loading points of interest...</p>
+              </div>
+            </details>
+            <p id="poi-status" class="poi-status" role="status" aria-live="polite" hidden></p>
+          </div>
+          <div class="map-tools">
+            <label for="map-view">Map view</label>
+            <select id="map-view">
+              <option value="global">Global</option>
+              <option value="north-pole">North pole</option>
+              <option value="south-pole">South pole</option>
+            </select>
+            <output id="map-coordinates" aria-live="polite">Lat −89.000° · Lon 0.000° E</output>
+          </div>
         </div>
       </div>
-      <div id="map" role="application" aria-label="Interactive lunar surface map. Click to select a landing site; drag to pan and use the controls to zoom."></div>
+      <div id="map" role="application" aria-label="Interactive lunar surface map. Click to set coordinates or select a highlighted point; drag to pan and use the controls to zoom."></div>
       <p class="map-attribution">LRO WAC imagery · high-zoom LOLA shaded relief · <a href="https://trek.nasa.gov/moon/" target="_blank" rel="noopener">NASA Moon Trek</a></p>
     </section>
 
@@ -124,11 +135,6 @@
           </div>
           <p class="note">Azimuth is measured clockwise from north. Elevation is relative to the local horizon; terrain can block the line of sight.</p>
           <p id="terrain-status" class="note">Terrain profile: not requested.</p>
-          <div class="table-frame">
-            <table><thead><tr><th scope="col">Timestamp (UTC)</th><th scope="col">Sun azimuth (°)</th><th scope="col">Sun elevation (°)</th><th scope="col">Sun terrain</th><th scope="col">Earth azimuth (°)</th><th scope="col">Earth elevation (°)</th><th scope="col">Earth terrain</th></tr></thead><tbody></tbody></table>
-          </div>
-          <div class="paging"><button type="button" id="previous">← Previous</button><span id="range" aria-live="polite"></span><button type="button" id="next">Next →</button></div>
-          <details><summary>Raw Horizons response</summary><pre id="raw" tabindex="0"></pre></details>
         </div>
       </section>
     </div>
