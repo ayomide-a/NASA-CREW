@@ -73,8 +73,20 @@
           <p>Run an observation to see the target’s elevation over time and its azimuth at every sample.</p>
         </div>
         <div id="data" hidden>
-          <div class="chart-head"><h3>Elevation over time</h3><span><i aria-hidden="true"></i> 0° horizontal plane</span></div>
-          <canvas id="chart" role="img" aria-label="Elevation in degrees over time. The accompanying table lists every value."></canvas>
+          <div class="chart-head"><h3>Target position</h3><span><i aria-hidden="true"></i> 0° horizon</span></div>
+          <div class="sky-view">
+            <canvas id="chart" role="img" aria-label="Target elevation relative to the horizon."></canvas>
+            <aside class="visibility" aria-label="Time above the horizon">
+              <div id="visibility-pie" class="visibility-pie" role="img" aria-label="0% of selected time above the horizon"><span id="visibility-value">0%</span></div>
+              <p>Above horizon</p>
+              <span id="visibility-duration"></span>
+            </aside>
+          </div>
+          <div class="playback">
+            <button type="button" id="playback" aria-pressed="false">Play</button>
+            <input id="time-slider" type="range" min="0" max="0" value="0" step="1" aria-label="Observation time">
+            <output id="current-reading" for="time-slider" aria-live="polite"></output>
+          </div>
           <p class="note">Elevations are relative to the local horizontal plane. Terrain can block the line of sight.</p>
           <div class="table-frame">
             <table><thead><tr><th scope="col">Timestamp (UTC)</th><th scope="col">Azimuth (°)</th><th scope="col">Elevation (°)</th></tr></thead><tbody></tbody></table>
