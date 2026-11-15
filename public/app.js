@@ -32,6 +32,10 @@ const assessment = {
 const mapElement = document.querySelector('#map');
 const mapCoordinates = document.querySelector('#map-coordinates');
 const mapViewSelect = document.querySelector('#map-view');
+const lolaStatus = document.querySelector('#lola-status');
+const quantStats = document.querySelector('#quant-stats');
+const demDetails = document.querySelector('#dem-details');
+const lolaPreview = document.querySelector('#lola-preview');
 const poiCount = document.querySelector('#poi-count');
 const poiPicker = document.querySelector('#poi-picker');
 const poiOptions = document.querySelector('#poi-options');
@@ -48,6 +52,7 @@ let playbackTimer;
 let pointsOfInterest = [];
 const selectedPoiIndexes = new Set();
 let chartZoom;
+let lolaRequest;
 
 const lunarExtent = [-180, -90, 180, 90];
 const lunarProjection = new ol.proj.Projection({
@@ -281,6 +286,74 @@ function updateSelectedSite(latitude, longitude) {
       coordinate[1] >= extent[1] && coordinate[1] <= extent[3]) {
     markerSource.addFeature(new ol.Feature(new ol.geom.Point(coordinate)));
   }
+  updateLolaDem(latitude, longitudeEast);
+}
+
+function updateLolaDem(latitude, longitudeEast) {
+  if (!lolaStatus || !quantStats || !demDetails || !lolaPreview) return;
+  if (lolaRequest) lolaRequest.abort();
+  lolaRequest = new AbortController();
+  lolaStatus.textContent = 'Loading LOLA DEM tile and terrain metrics…';
+  quantStats.textContent = 'DEM quantitative metrics pending.';
+  demDetails.textContent = 'Aspect, roughness, curvature, and hazard indicators pending.';
+  lolaPreview.hidden = true;
+
+  const params = new URLSearchParams({ latitude: String(latitude), longitude: String(longitudeEast) });
+  fetch('/api/lola?' + params, { signal: lolaRequest.signal })
+    .then(async response => {
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error ?? 'LOLA DEM request failed.');
+      lolaPreview.src = payload.tile.previewUrl;
+      lolaPreview.hidden = false;
+
+      const stats = payload.topography?.elevation;
+      const local = payload.topography?.local;
+      const aspect = payload.topography?.aspect;
+      const roughness = payload.topography?.roughness;
+      const curvature = payload.topography?.curvature;
+      const hazard = payload.topography?.hazard;
+
+      lolaStatus.textContent = payload.dataset.title + ' loaded for Lat ' + latitude.toFixed(3) +
+        '°, Lon ' + longitudeEast.toFixed(3) + '° E.';
+
+      if (stats && local) {
+        quantStats.textContent = 'Site ' + payload.elevationMeters.toFixed(1) + ' m · min/max ' +
+          stats.minMeters.toFixed(1) + '/' + stats.maxMeters.toFixed(1) + ' m · mean/median ' +
+          stats.meanMeters.toFixed(1) + '/' + stats.medianMeters.toFixed(1) + ' m · std dev ' +
+          stats.stdDevMeters.toFixed(2) + ' m · slope(avg/max) ' +
+          local.slopeMeanDeg.toFixed(2) + '°/' + local.slopeMaxDeg.toFixed(2) + '°';
+      } else {
+        quantStats.textContent = 'Site ' + payload.elevationMeters.toFixed(1) +
+          ' m · detailed topography metrics unavailable for this request.';
+      }
+
+      if (aspect && roughness && curvature && hazard) {
+        demDetails.textContent = 'Aspect: ' + aspect.downslopeAzimuthDeg.toFixed(1) + '° · RMS roughness: ' +
+          roughness.rmsMeters.toFixed(2) + ' m · TRI: ' + roughness.triMeters.toFixed(2) +
+          ' m · moving roughness std: ' + roughness.movingWindowStdDevMeters.toFixed(2) +
+          ' m · curvature (profile/plan/total): ' + curvature.profileMeanPerMeter.toExponential(2) + '/' +
+          curvature.planMeanPerMeter.toExponential(2) + '/' + curvature.totalPerMeter.toExponential(2) +
+          ' · local relief: ' + hazard.localReliefMeters.toFixed(1) + ' m · slope>10°: ' +
+          (hazard.slopeExceedanceFractions.over10Deg * 100).toFixed(1) + '% · open sky: ' +
+          (hazard.horizonExposure.openSkyFraction * 100).toFixed(1) + '%';
+      } else {
+        demDetails.textContent = 'Aspect, roughness, curvature, and hazard indicators are unavailable for this request.';
+      }
+
+      if (payload.topographyError) {
+        demDetails.textContent = 'Topography note: ' + payload.topographyError;
+      }
+    })
+    .catch(error => {
+      if (error.name === 'AbortError') return;
+      lolaStatus.textContent = 'LOLA DEM unavailable: ' + error.message;
+      quantStats.textContent = 'DEM quantitative metrics unavailable.';
+      demDetails.textContent = 'Could not compute aspect, roughness, curvature, or hazard indicators.';
+      lolaPreview.hidden = true;
+    })
+    .finally(() => {
+      lolaRequest = undefined;
+    });
 }
 
 function updateMarkerFromInputs() {

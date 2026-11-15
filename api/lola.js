@@ -5,6 +5,10 @@ const analysis = {
   profileRangeMeters: 12_000,
   concurrency: 4
 };
+const requestTimeoutMs = 30_000;
+const retryCount = 2;
+const responseCache = new Map();
+const responseCacheTtlMs = 30 * 60_000;
 const globalDem = {
   id: 'global',
   title: 'LOLA DEM Global 256 ppd',
@@ -106,6 +110,24 @@ function previewUrl(dataset, bbox) {
   return dataset.service + '/exportImage?' + query;
 }
 
+async function fetchJsonWithRetry(url, errorLabel) {
+  let lastError;
+  for (let attempt = 0; attempt <= retryCount; attempt += 1) {
+    try {
+      const response = await fetch(url, {
+        signal: AbortSignal.timeout(requestTimeoutMs),
+        headers: { 'User-Agent': 'Moonwalkers9/1.0 (https://moonwalkers9.vercel.app)' }
+      });
+      if (!response.ok) throw new Error(errorLabel + ' returned HTTP ' + response.status);
+      return await response.json();
+    } catch (error) {
+      lastError = error;
+      if (attempt < retryCount) await new Promise(resolve => setTimeout(resolve, 250 * (attempt + 1)));
+    }
+  }
+  throw lastError;
+}
+
 async function sampleElevation(latitude, longitude, dataset) {
   const coordinate = sampleCoordinate(latitude, longitude, dataset);
   const query = new URLSearchParams({
@@ -119,15 +141,19 @@ async function sampleElevation(latitude, longitude, dataset) {
     sr: coordinate.sr,
     f: 'json'
   });
-  const response = await fetch(dataset.service + '/getSamples?' + query, {
-    signal: AbortSignal.timeout(15_000),
-    headers: { 'User-Agent': 'Moonwalkers9/1.0 (https://moonwalkers9.vercel.app)' }
-  });
-  if (!response.ok) throw new Error('LOLA getSamples returned HTTP ' + response.status);
-  const payload = await response.json();
+  const payload = await fetchJsonWithRetry(dataset.service + '/getSamples?' + query, 'LOLA getSamples');
   const elevation = Number(payload?.samples?.[0]?.value);
   if (!Number.isFinite(elevation)) throw new Error('LOLA elevation sample is unavailable.');
   return elevation;
+}
+
+async function sampleElevationWithFallback(latitude, longitude, dataset) {
+  try {
+    return await sampleElevation(latitude, longitude, dataset);
+  } catch (error) {
+    if (dataset.id === globalDem.id) throw error;
+    return sampleElevation(latitude, longitude, globalDem);
+  }
 }
 
 function profileUrl(latitude, longitude, azimuth, service) {
@@ -148,12 +174,7 @@ function profileUrl(latitude, longitude, azimuth, service) {
 }
 
 async function fetchProfile(latitude, longitude, azimuth, service) {
-  const response = await fetch(profileUrl(latitude, longitude, azimuth, service), {
-    signal: AbortSignal.timeout(20_000),
-    headers: { 'User-Agent': 'Moonwalkers9/1.0 (https://moonwalkers9.vercel.app)' }
-  });
-  if (!response.ok) throw new Error('LOLA profile request returned HTTP ' + response.status);
-  const payload = await response.json();
+  const payload = await fetchJsonWithRetry(profileUrl(latitude, longitude, azimuth, service), 'LOLA profile request');
   const elevations = (payload.samples ?? []).map(sample => Number(sample.value)).filter(Number.isFinite);
   if (elevations.length < 3) throw new Error('LOLA profile request returned insufficient samples.');
   return { azimuth, elevations };
@@ -380,9 +401,14 @@ export default {
     const normalizedLongitude = mapLongitude(eastLongitude);
     const dataset = selectDataset(latitude);
     const bbox = buildBbox(latitude, normalizedLongitude, dataset);
+    const cacheKey = [dataset.id, latitude.toFixed(4), normalizedLongitude.toFixed(4)].join('|');
+    const cached = responseCache.get(cacheKey);
+    if (cached && Date.now() - cached.savedAt < responseCacheTtlMs) {
+      return Response.json(cached.payload, { headers: { 'Cache-Control': 'public, max-age=120, s-maxage=600' } });
+    }
 
     try {
-      const elevationMeters = await sampleElevation(latitude, normalizedLongitude, dataset);
+      const elevationMeters = await sampleElevationWithFallback(latitude, normalizedLongitude, dataset);
       let topography;
       let topographyError;
       try {
@@ -391,7 +417,7 @@ export default {
       } catch (error) {
         topographyError = error.message;
       }
-      return Response.json({
+      const payload = {
         schemaVersion: '2.0.0',
         dataset: {
           id: dataset.id,
@@ -422,8 +448,17 @@ export default {
         topography,
         topographyError,
         source: 'NASA Moon Trek LOLA DEM ImageServer'
-      }, { headers: { 'Cache-Control': 'public, max-age=120, s-maxage=600' } });
+      };
+      responseCache.set(cacheKey, { payload, savedAt: Date.now() });
+      return Response.json(payload, { headers: { 'Cache-Control': 'public, max-age=120, s-maxage=600' } });
     } catch (error) {
+      if (cached) {
+        const stalePayload = {
+          ...cached.payload,
+          topographyError: 'Using cached data due to temporary LOLA service issue: ' + error.message
+        };
+        return Response.json(stalePayload, { headers: { 'Cache-Control': 'public, max-age=30, s-maxage=60' } });
+      }
       return Response.json({ error: 'LOLA DEM request failed: ' + error.message }, { status: 502 });
     }
   }

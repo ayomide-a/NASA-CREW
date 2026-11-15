@@ -57,6 +57,15 @@
         </div>
       </div>
       <div id="map" role="application" aria-label="Interactive lunar surface map. Click to set coordinates or select a highlighted point; drag to pan and use the controls to zoom."></div>
+      <div class="lola-panel" aria-live="polite">
+        <div>
+          <h3>Lunar Topography</h3>
+          <p id="lola-status">Select or edit coordinates to load local LOLA DEM information.</p>
+          <p id="quant-stats" class="dataset-stats">DEM quantitative metrics pending.</p>
+          <p id="dem-details" class="dataset-stats">Aspect, roughness, curvature, and hazard indicators will appear here.</p>
+        </div>
+        <img id="lola-preview" alt="Local lunar DEM preview tile around the selected site" hidden>
+      </div>
       <p class="map-attribution">LRO WAC imagery · high-zoom LOLA shaded relief · <a href="https://trek.nasa.gov/moon/" target="_blank" rel="noopener">NASA Moon Trek</a></p>
     </section>
 
