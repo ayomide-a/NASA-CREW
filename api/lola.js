@@ -9,6 +9,9 @@ const requestTimeoutMs = 30_000;
 const retryCount = 2;
 const responseCache = new Map();
 const responseCacheTtlMs = 30 * 60_000;
+const lolaSpotCollectionId = 'lunar_orbiter_laser_altimeter';
+const lolaSpotApiRoot = 'https://g6goyz4w56.execute-api.us-west-2.amazonaws.com/prod';
+const lolaSpotMaxPoints = 450;
 const globalDem = {
   id: 'global',
   title: 'LOLA DEM Global 256 ppd',
@@ -108,6 +111,117 @@ function previewUrl(dataset, bbox) {
     f: 'image'
   });
   return dataset.service + '/exportImage?' + query;
+}
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function encodeSvgDataUrl(svg) {
+  return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
+}
+
+function pickSpotValue(properties = {}) {
+  const candidates = [
+    properties.radius,
+    properties.radius_km,
+    properties.radiusKm,
+    properties.elevation,
+    properties.elevation_m,
+    properties.value
+  ];
+  for (const candidate of candidates) {
+    const numeric = Number(candidate);
+    if (Number.isFinite(numeric)) return numeric;
+  }
+  return NaN;
+}
+
+function buildSpotPreview(points, bbox) {
+  const [minLon, minLat, maxLon, maxLat] = bbox;
+  const width = 512;
+  const height = 512;
+  const lonSpan = Math.max(1e-6, maxLon - minLon);
+  const latSpan = Math.max(1e-6, maxLat - minLat);
+
+  const values = points.map(point => point.value).filter(Number.isFinite);
+  const minValue = values.length ? Math.min(...values) : 0;
+  const maxValue = values.length ? Math.max(...values) : 1;
+  const valueSpan = Math.max(1e-9, maxValue - minValue);
+
+  const circles = points.map(point => {
+    const x = ((point.longitude - minLon) / lonSpan) * width;
+    const y = height - ((point.latitude - minLat) / latSpan) * height;
+    const normalized = Number.isFinite(point.value) ? (point.value - minValue) / valueSpan : 0.5;
+    const hue = 210 - normalized * 180;
+    return '<circle cx="' + x.toFixed(2) + '" cy="' + y.toFixed(2) + '" r="1.85" fill="hsl(' +
+      hue.toFixed(1) + ',85%,62%)" fill-opacity="0.82" />';
+  }).join('');
+
+  const label = points.length + ' spots';
+  const svg =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">' +
+    '<defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0e1114"/>' +
+    '<stop offset="1" stop-color="#151b21"/></linearGradient></defs>' +
+    '<rect width="512" height="512" fill="url(#bg)"/>' + circles +
+    '<rect x="0.5" y="0.5" width="511" height="511" fill="none" stroke="#3b444f"/>' +
+    '<text x="10" y="500" fill="#d0d6de" font-family="monospace" font-size="13">' + label + '</text>' +
+    '</svg>';
+
+  return encodeSvgDataUrl(svg);
+}
+
+async function fetchSpotObservations(latitude, longitude) {
+  const halfSpan = 0.18;
+  const bbox = [
+    clamp(longitude - halfSpan, -180, 180),
+    clamp(latitude - halfSpan, -90, 90),
+    clamp(longitude + halfSpan, -180, 180),
+    clamp(latitude + halfSpan, -90, 90)
+  ];
+
+  const query = new URLSearchParams({
+    bbox: bbox.join(','),
+    limit: String(lolaSpotMaxPoints)
+  });
+  const url = lolaSpotApiRoot + '/collections/' + lolaSpotCollectionId + '/items?' + query;
+  const payload = await fetchJsonWithRetry(url, 'LOLA spot STAC query');
+  const features = Array.isArray(payload?.features) ? payload.features : [];
+
+  const points = features
+    .map(feature => {
+      const coordinates = feature?.geometry?.coordinates;
+      if (!Array.isArray(coordinates) || coordinates.length < 2) return undefined;
+      const longitudeValue = Number(coordinates[0]);
+      const latitudeValue = Number(coordinates[1]);
+      if (!Number.isFinite(longitudeValue) || !Number.isFinite(latitudeValue)) return undefined;
+      return {
+        longitude: longitudeValue,
+        latitude: latitudeValue,
+        value: pickSpotValue(feature?.properties)
+      };
+    })
+    .filter(Boolean);
+
+  if (!points.length) {
+    return {
+      collectionId: lolaSpotCollectionId,
+      title: 'LOLA Shot Observations',
+      count: 0,
+      bbox,
+      previewDataUrl: undefined,
+      source: 'USGS Astrogeology STAC'
+    };
+  }
+
+  return {
+    collectionId: lolaSpotCollectionId,
+    title: 'LOLA Shot Observations',
+    count: points.length,
+    bbox,
+    previewDataUrl: buildSpotPreview(points, bbox),
+    source: 'USGS Astrogeology STAC'
+  };
 }
 
 async function fetchJsonWithRetry(url, errorLabel) {
@@ -417,6 +531,19 @@ export default {
       } catch (error) {
         topographyError = error.message;
       }
+
+      let spotObservations;
+      try {
+        spotObservations = await fetchSpotObservations(latitude, normalizedLongitude);
+      } catch {
+        spotObservations = {
+          collectionId: lolaSpotCollectionId,
+          title: 'LOLA Shot Observations',
+          count: 0,
+          source: 'USGS Astrogeology STAC'
+        };
+      }
+
       const payload = {
         schemaVersion: '2.0.0',
         dataset: {
@@ -447,6 +574,7 @@ export default {
         elevationMeters,
         topography,
         topographyError,
+        spotObservations,
         source: 'NASA Moon Trek LOLA DEM ImageServer'
       };
       responseCache.set(cacheKey, { payload, savedAt: Date.now() });

@@ -53,6 +53,10 @@ const lolaStatus = document.querySelector('#lola-status');
 const quantStats = document.querySelector('#quant-stats');
 const demDetails = document.querySelector('#dem-details');
 const lolaPreview = document.querySelector('#lola-preview');
+const lolaSpotPreview = document.querySelector('#lola-spot-preview');
+const lolaPrevView = document.querySelector('#lola-prev-view');
+const lolaNextView = document.querySelector('#lola-next-view');
+const lolaViewLabel = document.querySelector('#lola-view-label');
 const poiCount = document.querySelector('#poi-count');
 const poiPicker = document.querySelector('#poi-picker');
 const poiOptions = document.querySelector('#poi-options');
@@ -104,6 +108,37 @@ let activeRegionIndex;
 let activeAboutRegionIndex;
 let chartZoom;
 let lolaRequest;
+const lolaTileViews = [];
+let lolaTileViewIndex = 0;
+
+function renderLolaTileView() {
+  if (!lolaPreview || !lolaSpotPreview || !lolaPrevView || !lolaNextView || !lolaViewLabel) return;
+  const hasViews = lolaTileViews.length > 0;
+  lolaPreview.hidden = true;
+  lolaSpotPreview.hidden = true;
+  if (!hasViews) {
+    lolaViewLabel.textContent = 'No tile';
+    lolaPrevView.disabled = true;
+    lolaNextView.disabled = true;
+    return;
+  }
+  const current = lolaTileViews[lolaTileViewIndex];
+  if (current?.key === 'dem') lolaPreview.hidden = false;
+  if (current?.key === 'spot') lolaSpotPreview.hidden = false;
+  lolaViewLabel.textContent = current?.label ?? 'Tile';
+  const canNavigate = lolaTileViews.length > 1;
+  lolaPrevView.disabled = !canNavigate;
+  lolaNextView.disabled = !canNavigate;
+}
+
+function cycleLolaTileView(direction) {
+  if (lolaTileViews.length < 2) return;
+  lolaTileViewIndex = (lolaTileViewIndex + direction + lolaTileViews.length) % lolaTileViews.length;
+  renderLolaTileView();
+}
+
+lolaPrevView?.addEventListener('click', () => cycleLolaTileView(-1));
+lolaNextView?.addEventListener('click', () => cycleLolaTileView(1));
 
 const lunarExtent = [-180, -90, 180, 90];
 const lunarProjection = new ol.proj.Projection({
@@ -414,7 +449,11 @@ function updateLolaDem(latitude, longitudeEast) {
   lolaStatus.textContent = 'Loading LOLA DEM tile and terrain metrics…';
   quantStats.textContent = 'DEM quantitative metrics pending.';
   demDetails.textContent = 'Aspect, roughness, curvature, and hazard indicators pending.';
+  lolaTileViews.length = 0;
+  lolaTileViewIndex = 0;
   lolaPreview.hidden = true;
+  if (lolaSpotPreview) lolaSpotPreview.hidden = true;
+  renderLolaTileView();
 
   const params = new URLSearchParams({ latitude: String(latitude), longitude: String(longitudeEast) });
   fetch('/api/lola?' + params, { signal: lolaRequest.signal })
@@ -422,7 +461,13 @@ function updateLolaDem(latitude, longitudeEast) {
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error ?? 'LOLA DEM request failed.');
       lolaPreview.src = payload.tile.previewUrl;
-      lolaPreview.hidden = false;
+      lolaTileViews.push({ key: 'dem', label: 'DEM tile' });
+      if (payload.spotObservations?.previewDataUrl && lolaSpotPreview) {
+        lolaSpotPreview.src = payload.spotObservations.previewDataUrl;
+        lolaTileViews.push({ key: 'spot', label: 'Spot observations' });
+      }
+      lolaTileViewIndex = 0;
+      renderLolaTileView();
 
       const stats = payload.topography?.elevation;
       const local = payload.topography?.local;
@@ -435,25 +480,27 @@ function updateLolaDem(latitude, longitudeEast) {
         '°, Lon ' + longitudeEast.toFixed(3) + '° E.';
 
       if (stats && local) {
-        quantStats.textContent = 'Site ' + payload.elevationMeters.toFixed(1) + ' m · min/max ' +
-          stats.minMeters.toFixed(1) + '/' + stats.maxMeters.toFixed(1) + ' m · mean/median ' +
-          stats.meanMeters.toFixed(1) + '/' + stats.medianMeters.toFixed(1) + ' m · std dev ' +
-          stats.stdDevMeters.toFixed(2) + ' m · slope(avg/max) ' +
-          local.slopeMeanDeg.toFixed(2) + '°/' + local.slopeMaxDeg.toFixed(2) + '°';
+        quantStats.textContent =
+          'Site elevation: ' + payload.elevationMeters.toFixed(1) + ' m\n' +
+          'Min/Max: ' + stats.minMeters.toFixed(1) + ' / ' + stats.maxMeters.toFixed(1) + ' m\n' +
+          'Mean/Median: ' + stats.meanMeters.toFixed(1) + ' / ' + stats.medianMeters.toFixed(1) + ' m\n' +
+          'Std dev: ' + stats.stdDevMeters.toFixed(2) + ' m\n' +
+          'Slope (avg/max): ' + local.slopeMeanDeg.toFixed(2) + '° / ' + local.slopeMaxDeg.toFixed(2) + '°';
       } else {
         quantStats.textContent = 'Site ' + payload.elevationMeters.toFixed(1) +
           ' m · detailed topography metrics unavailable for this request.';
       }
 
       if (aspect && roughness && curvature && hazard) {
-        demDetails.textContent = 'Aspect: ' + aspect.downslopeAzimuthDeg.toFixed(1) + '° · RMS roughness: ' +
-          roughness.rmsMeters.toFixed(2) + ' m · TRI: ' + roughness.triMeters.toFixed(2) +
-          ' m · moving roughness std: ' + roughness.movingWindowStdDevMeters.toFixed(2) +
-          ' m · curvature (profile/plan/total): ' + curvature.profileMeanPerMeter.toExponential(2) + '/' +
-          curvature.planMeanPerMeter.toExponential(2) + '/' + curvature.totalPerMeter.toExponential(2) +
-          ' · local relief: ' + hazard.localReliefMeters.toFixed(1) + ' m · slope>10°: ' +
-          (hazard.slopeExceedanceFractions.over10Deg * 100).toFixed(1) + '% · open sky: ' +
-          (hazard.horizonExposure.openSkyFraction * 100).toFixed(1) + '%';
+        demDetails.textContent =
+          'Aspect (downslope): ' + aspect.downslopeAzimuthDeg.toFixed(1) + '°\n' +
+          'Roughness RMS / TRI: ' + roughness.rmsMeters.toFixed(2) + ' / ' + roughness.triMeters.toFixed(2) + ' m\n' +
+          'Moving roughness std: ' + roughness.movingWindowStdDevMeters.toFixed(2) + ' m\n' +
+          'Curvature (profile/plan/total): ' + curvature.profileMeanPerMeter.toExponential(2) + ' / ' +
+          curvature.planMeanPerMeter.toExponential(2) + ' / ' + curvature.totalPerMeter.toExponential(2) + '\n' +
+          'Local relief: ' + hazard.localReliefMeters.toFixed(1) + ' m\n' +
+          'Slope > 10°: ' + (hazard.slopeExceedanceFractions.over10Deg * 100).toFixed(1) + '%\n' +
+          'Open sky: ' + (hazard.horizonExposure.openSkyFraction * 100).toFixed(1) + '%';
       } else {
         demDetails.textContent = 'Aspect, roughness, curvature, and hazard indicators are unavailable for this request.';
       }
@@ -461,13 +508,21 @@ function updateLolaDem(latitude, longitudeEast) {
       if (payload.topographyError) {
         demDetails.textContent = 'Topography note: ' + payload.topographyError;
       }
+
+      if (!payload.spotObservations?.previewDataUrl) {
+        demDetails.textContent += ' LOLA spot observations are unavailable for this location.';
+      }
     })
     .catch(error => {
       if (error.name === 'AbortError') return;
       lolaStatus.textContent = 'LOLA DEM unavailable: ' + error.message;
       quantStats.textContent = 'DEM quantitative metrics unavailable.';
       demDetails.textContent = 'Could not compute aspect, roughness, curvature, or hazard indicators.';
+      lolaTileViews.length = 0;
+      lolaTileViewIndex = 0;
       lolaPreview.hidden = true;
+      if (lolaSpotPreview) lolaSpotPreview.hidden = true;
+      renderLolaTileView();
     })
     .finally(() => {
       lolaRequest = undefined;

@@ -87,7 +87,15 @@
           <p id="quant-stats" class="dataset-stats">DEM quantitative metrics pending.</p>
           <p id="dem-details" class="dataset-stats">Aspect, roughness, curvature, and hazard indicators will appear here.</p>
         </div>
-        <img id="lola-preview" alt="Local lunar DEM preview tile around the selected site" hidden>
+        <div class="lola-tile-view">
+          <img id="lola-preview" alt="Local lunar DEM preview tile around the selected site" hidden>
+          <img id="lola-spot-preview" alt="LOLA spot observations around the selected lunar site" hidden>
+          <div class="lola-tile-nav" aria-label="Topography tile view navigation">
+            <button id="lola-prev-view" type="button" aria-label="Show previous topography tile view">&#8592;</button>
+            <span id="lola-view-label">DEM tile</span>
+            <button id="lola-next-view" type="button" aria-label="Show next topography tile view">&#8594;</button>
+          </div>
+        </div>
       </div>
       <p class="map-attribution">LRO WAC imagery · high-zoom LOLA shaded relief · <a href="https://trek.nasa.gov/moon/" target="_blank" rel="noopener">NASA Moon Trek</a></p>
       <button id="assessment-launch" class="assessment-launch" type="button" disabled>Landing-Site Assessment</button>
