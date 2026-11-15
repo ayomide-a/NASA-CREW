@@ -1,11 +1,13 @@
 const form = document.querySelector('#query-form');
-const run = form.querySelector('.run');
+const run = document.querySelector('#run-observation');
 const status = document.querySelector('#status');
 const empty = document.querySelector('#empty');
 const data = document.querySelector('#data');
 const summary = document.querySelector('#summary');
 const download = document.querySelector('.download');
 const table = document.querySelector('tbody');
+const tableToggle = document.querySelector('#table-toggle');
+const tableDetails = document.querySelector('#table-details');
 const previous = document.querySelector('#previous');
 const next = document.querySelector('#next');
 const range = document.querySelector('#range');
@@ -37,6 +39,13 @@ const assessment = {
   sun: { visible: document.querySelector('#sun-assessment-visible'), time: document.querySelector('#sun-assessment-time'), max: document.querySelector('#sun-assessment-max'), obstruction: document.querySelector('#sun-assessment-obstruction') },
   earth: { visible: document.querySelector('#earth-assessment-visible'), time: document.querySelector('#earth-assessment-time'), max: document.querySelector('#earth-assessment-max'), obstruction: document.querySelector('#earth-assessment-obstruction') }
 };
+const assessmentSection = document.querySelector('.site-assessment');
+const assessmentLaunch = document.querySelector('#assessment-launch');
+const assessmentModal = document.querySelector('#assessment-modal');
+const assessmentModalBody = document.querySelector('#assessment-modal-body');
+const assessmentClose = document.querySelector('#assessment-close');
+const assessmentSiteA = document.querySelector('#assessment-site-a');
+const assessmentSiteB = document.querySelector('#assessment-site-b');
 const mapElement = document.querySelector('#map');
 const mapCoordinates = document.querySelector('#map-coordinates');
 const mapViewSelect = document.querySelector('#map-view');
@@ -82,6 +91,9 @@ const siteRecommendation = document.querySelector('#site-recommendation');
 const recommendationTitle = document.querySelector('#recommendation-title');
 const recommendationDetails = document.querySelector('#recommendation-details');
 let comparisonResult;
+let comparisonParams;
+let resultParams;
+let assessmentSite = 'a';
 let currentIndex = 0;
 let playbackTimer;
 let pointsOfInterest = [];
@@ -1138,13 +1150,22 @@ function drawChart() {
     context.lineWidth = 3;
     context.setLineDash(isComparison ? [2, 5] : [8, 5]);
     let started = false;
-    horizons.forEach(point => {
-      const pointAzimuth = relativeAzimuth(point.azimuth);
-      if (chartZoom && (pointAzimuth < viewCenter - viewSpan / 2 || pointAzimuth > viewCenter + viewSpan / 2)) return;
+    let previousAzimuth;
+    horizons.map(point => ({ point, azimuth: relativeAzimuth(point.azimuth) }))
+      .filter(({ azimuth }) => !chartZoom ||
+        (azimuth >= viewCenter - viewSpan / 2 && azimuth <= viewCenter + viewSpan / 2))
+      .sort((first, second) => first.azimuth - second.azimuth)
+      .forEach(({ point, azimuth }) => {
+      if (previousAzimuth !== undefined && azimuth - previousAzimuth > 15) {
+        context.stroke();
+        context.beginPath();
+        started = false;
+      }
       const pointX = x(point.azimuth);
       const pointY = y(point.horizonElevation);
       if (!started) { context.moveTo(pointX, pointY); started = true; }
       else context.lineTo(pointX, pointY);
+      previousAzimuth = azimuth;
     });
     context.stroke();
     context.setLineDash([]);
@@ -1170,11 +1191,13 @@ function drawChart() {
     context.moveTo(plot.left, position);
     context.lineTo(plot.right, position);
     context.stroke();
-    context.fillText(elevation + '°', plot.left - 8, position);
+    context.fillText((chartZoom ? elevation.toFixed(1) : elevation) + '°', plot.left - 8, position);
   }
   context.setLineDash([]);
 
-  const azimuthLabels = ['0° N', '90° E', '180° S', '270° W', '360° N'];
+  const azimuthLabels = chartZoom
+    ? [-30, -15, 0, 15, 30].map(offset => Math.round((viewCenter + offset + 360) % 360) + '°')
+    : ['0° N', '90° E', '180° S', '270° W', '360° N'];
   context.textAlign = 'center';
   for (let index = 0; index < azimuthLabels.length; index += 1) {
     const position = plot.left + index / (azimuthLabels.length - 1) * (plot.right - plot.left);
@@ -1188,7 +1211,9 @@ function drawChart() {
   context.fillStyle = muted;
   context.fillText('Azimuth (clockwise from north)', (plot.left + plot.right) / 2, height - 17);
   context.save();
-  context.translate(22, (plot.top + plot.bottom) / 2);
+  context.textAlign = 'center';
+  context.textBaseline = 'middle';
+  context.translate(12, (plot.top + plot.bottom) / 2);
   context.rotate(-Math.PI / 2);
   context.fillText('Elevation', 0, 0);
   context.restore();
@@ -1403,8 +1428,8 @@ function renderSiteRecommendation(sites) {
     '%). This compares Sun and Earth visibility equally and does not assess other landing risks.';
 }
 
-function targetStats(target, params) {
-  const rows = result[target].rows;
+function targetStats(target, params, siteResult = result) {
+  const rows = siteResult[target].rows;
   const start = Date.parse(params.get('start') + ':00Z');
   const stop = Date.parse(params.get('stop') + ':00Z');
   const times = [start, ...rows.map(row => Date.parse(row.time)).filter(time => time > start && time < stop), stop];
@@ -1413,8 +1438,8 @@ function targetStats(target, params) {
   let maximum = -90;
   for (let index = 1; index < times.length; index += 1) {
     const interval = times[index] - times[index - 1];
-    const first = elevationAt(times[index - 1], rows) - terrainHorizonAt(times[index - 1], target);
-    const last = elevationAt(times[index], rows) - terrainHorizonAt(times[index], target);
+    const first = elevationAt(times[index - 1], rows) - terrainHorizonAt(times[index - 1], target, siteResult);
+    const last = elevationAt(times[index], rows) - terrainHorizonAt(times[index], target, siteResult);
     maximum = Math.max(maximum, elevationAt(times[index - 1], rows), elevationAt(times[index], rows));
     if (first > 0 && last > 0) above += interval;
     else if (first > 0 && last <= 0) above += interval * first / (first - last);
@@ -1426,7 +1451,9 @@ function targetStats(target, params) {
 }
 
 function updateAssessment(params) {
-  const stats = { sun: targetStats('sun', params), earth: targetStats('earth', params) };
+  const siteResult = assessmentSite === 'b' && comparisonResult ? comparisonResult : result;
+  const siteParams = assessmentSite === 'b' && comparisonParams ? comparisonParams : params;
+  const stats = { sun: targetStats('sun', siteParams, siteResult), earth: targetStats('earth', siteParams, siteResult) };
   for (const target of ['sun', 'earth']) {
     const current = assessment[target];
     const targetStatsValue = stats[target];
@@ -1448,6 +1475,36 @@ function updateAssessment(params) {
         ? 'Strong Earth visibility, but limited solar availability.'
         : 'Both power and communication windows are limited by the terrain horizon.';
 }
+
+function openAssessmentModal() {
+  if (!assessmentSection || !assessmentModal || !assessmentModalBody) return;
+  assessmentModal.hidden = false;
+  assessmentClose.focus();
+}
+
+function closeAssessmentModal() {
+  if (!assessmentModal) return;
+  assessmentModal.hidden = true;
+}
+
+assessmentLaunch.addEventListener('click', openAssessmentModal);
+function setAssessmentSite(site) {
+  assessmentSite = site;
+  assessmentSiteA.classList.toggle('is-active', site === 'a');
+  assessmentSiteB.classList.toggle('is-active', site === 'b');
+  assessmentSiteA.setAttribute('aria-pressed', String(site === 'a'));
+  assessmentSiteB.setAttribute('aria-pressed', String(site === 'b'));
+  updateAssessment(site === 'b' ? comparisonParams : resultParams);
+}
+assessmentSiteA.addEventListener('click', () => setAssessmentSite('a'));
+assessmentSiteB.addEventListener('click', () => setAssessmentSite('b'));
+assessmentClose.addEventListener('click', closeAssessmentModal);
+assessmentModal.addEventListener('click', event => {
+  if (event.target === assessmentModal) closeAssessmentModal();
+});
+window.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && !assessmentModal.hidden) closeAssessmentModal();
+});
 
 function updateCurrentReading() {
   currentIndex = Number(slider.value);
@@ -1535,17 +1592,25 @@ function startPlayback() {
   }, 250);
 }
 
-function renderResult(payload, params, comparison, comparisonParams) {
+function renderResult(payload, params, comparison, comparisonParamsInput) {
   stopPlayback();
   result = payload;
   comparisonResult = comparison;
+  resultParams = params;
+  comparisonParams = comparisonParamsInput;
+  tableDetails.hidden = true;
+  tableToggle.setAttribute('aria-expanded', 'false');
+  tableToggle.firstElementChild.textContent = 'View additional topographical information';
+  tableToggle.lastElementChild.textContent = '+';
+  assessmentSiteB.disabled = !comparisonResult;
+  setAssessmentSite('a');
   page = 0;
   currentIndex = 0;
   slider.max = String(result.rows.length - 1);
   slider.value = '0';
   const site = params.get('latitude') + '°, ' + params.get('longitude') + '° E';
-  const comparisonSite = comparisonParams
-    ? comparisonParams.get('latitude') + '°, ' + comparisonParams.get('longitude') + '° E'
+  const comparisonSite = comparisonParamsInput
+    ? comparisonParamsInput.get('latitude') + '°, ' + comparisonParamsInput.get('longitude') + '° E'
     : '';
   summary.textContent = 'Sun + Earth · Site A ' + site +
     (comparisonResult ? ' · Site B ' + comparisonSite : '') + ' · ' + result.rows.length + ' samples';
@@ -1567,7 +1632,9 @@ function renderResult(payload, params, comparison, comparisonParams) {
     : 'Terrain profile unavailable: ' + (result.terrainError ?? 'Moon Trek did not return elevation data.') +
       ' Increase the observation step size and try again.';
   download.disabled = false;
+  assessmentLaunch.disabled = false;
   updateAssessment(params);
+  openAssessmentModal();
   renderTable();
   const siteVisibility = updateVisibility(params);
   renderSiteRecommendation(siteVisibility);
@@ -1637,7 +1704,6 @@ form.addEventListener('submit', async event => {
     const earth = await fetchTarget(params, 'earth');
     const combined = combineResults(sun, earth);
     combined.terrainPending = true;
-    renderResult(combined, params, undefined, undefined);
     status.textContent = 'Ephemeris loaded. Loading Moon Trek terrain horizon…';
     const terrainParams = new URLSearchParams({
       latitude: params.get('latitude'), longitude: params.get('longitude'), altitude: params.get('altitude'),
@@ -1678,6 +1744,15 @@ playback.addEventListener('click', () => {
 });
 previous.addEventListener('click', () => { page -= 1; renderTable(); });
 next.addEventListener('click', () => { page += 1; renderTable(); });
+tableToggle.addEventListener('click', () => {
+  const isVisible = !tableDetails.hidden;
+  tableDetails.hidden = isVisible;
+  tableToggle.setAttribute('aria-expanded', String(!isVisible));
+  tableToggle.firstElementChild.textContent = isVisible
+    ? 'View additional topographical information'
+    : 'Hide additional topographical information';
+  tableToggle.lastElementChild.textContent = isVisible ? '+' : '−';
+});
 slider.addEventListener('input', () => {
   stopPlayback();
   updateCurrentReading();
