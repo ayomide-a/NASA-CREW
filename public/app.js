@@ -54,6 +54,7 @@ const mapInstructions = document.querySelector('#map-instructions');
 const globeMode = document.querySelector('#globe-mode');
 const mapMode = document.querySelector('#map-mode');
 const globePanel = document.querySelector('#site-globe');
+const globeStage = document.querySelector('.globe-stage');
 const globeList = document.querySelector('#globe-site-list');
 const globeStatus = document.querySelector('#globe-status');
 const globeReset = document.querySelector('#globe-reset');
@@ -75,7 +76,6 @@ const regionOptions = document.querySelector('#region-options');
 const regionStatus = document.querySelector('#region-status');
 const regionPopupElement = document.querySelector('#region-popup');
 const regionPopupName = document.querySelector('#region-popup-name');
-const closeRegionPopup = document.querySelector('#close-region-popup');
 const regionAboutPanel = document.querySelector('#region-about-panel');
 const regionAboutTitle = document.querySelector('#region-about-title');
 const regionAboutDescription = document.querySelector('#region-about-description');
@@ -339,8 +339,6 @@ function showRegionPopup(index, coordinate) {
   regionPopupOverlay.setPosition(coordinate);
 }
 
-closeRegionPopup.addEventListener('click', hideRegionPopup);
-
 function hideRegionAbout() {
   activeAboutRegionIndex = undefined;
   regionAboutPanel.hidden = true;
@@ -348,13 +346,14 @@ function hideRegionAbout() {
 
 function showRegionAbout(index) {
   const region = regions[index];
-  if (!region || !region.description) {
+  if (!region || (!region.description && globePanel.hidden)) {
     hideRegionAbout();
     return;
   }
   activeAboutRegionIndex = index;
   regionAboutTitle.textContent = region.name;
   regionAboutDescription.textContent = region.description;
+  regionAboutDescription.hidden = !region.description;
   if (region.descriptionSource) {
     regionAboutSource.href = region.descriptionSource;
     regionAboutSource.hidden = false;
@@ -494,25 +493,27 @@ function updateLolaDem(latitude, longitudeEast) {
         '°, Lon ' + longitudeEast.toFixed(3) + '° E.';
 
       if (stats && local) {
-        quantStats.textContent = 'Site ' + payload.elevationMeters.toFixed(1) + ' m · min/max ' +
-          stats.minMeters.toFixed(1) + '/' + stats.maxMeters.toFixed(1) + ' m · mean/median ' +
-          stats.meanMeters.toFixed(1) + '/' + stats.medianMeters.toFixed(1) + ' m · std dev ' +
-          stats.stdDevMeters.toFixed(2) + ' m · slope(avg/max) ' +
-          local.slopeMeanDeg.toFixed(2) + '°/' + local.slopeMaxDeg.toFixed(2) + '°';
+        quantStats.textContent =
+          'Site elevation: ' + payload.elevationMeters.toFixed(1) + ' m\n' +
+          'Min/Max: ' + stats.minMeters.toFixed(1) + ' / ' + stats.maxMeters.toFixed(1) + ' m\n' +
+          'Mean/Median: ' + stats.meanMeters.toFixed(1) + ' / ' + stats.medianMeters.toFixed(1) + ' m\n' +
+          'Std dev: ' + stats.stdDevMeters.toFixed(2) + ' m\n' +
+          'Slope (avg/max): ' + local.slopeMeanDeg.toFixed(2) + '° / ' + local.slopeMaxDeg.toFixed(2) + '°';
       } else {
         quantStats.textContent = 'Site ' + payload.elevationMeters.toFixed(1) +
           ' m · detailed topography metrics unavailable for this request.';
       }
 
       if (aspect && roughness && curvature && hazard) {
-        demDetails.textContent = 'Aspect: ' + aspect.downslopeAzimuthDeg.toFixed(1) + '° · RMS roughness: ' +
-          roughness.rmsMeters.toFixed(2) + ' m · TRI: ' + roughness.triMeters.toFixed(2) +
-          ' m · moving roughness std: ' + roughness.movingWindowStdDevMeters.toFixed(2) +
-          ' m · curvature (profile/plan/total): ' + curvature.profileMeanPerMeter.toExponential(2) + '/' +
-          curvature.planMeanPerMeter.toExponential(2) + '/' + curvature.totalPerMeter.toExponential(2) +
-          ' · local relief: ' + hazard.localReliefMeters.toFixed(1) + ' m · slope>10°: ' +
-          (hazard.slopeExceedanceFractions.over10Deg * 100).toFixed(1) + '% · open sky: ' +
-          (hazard.horizonExposure.openSkyFraction * 100).toFixed(1) + '%';
+        demDetails.textContent =
+          'Aspect (downslope): ' + aspect.downslopeAzimuthDeg.toFixed(1) + '°\n' +
+          'Roughness RMS / TRI: ' + roughness.rmsMeters.toFixed(2) + ' / ' + roughness.triMeters.toFixed(2) + ' m\n' +
+          'Moving roughness std: ' + roughness.movingWindowStdDevMeters.toFixed(2) + ' m\n' +
+          'Curvature (profile/plan/total): ' + curvature.profileMeanPerMeter.toExponential(2) + ' / ' +
+          curvature.planMeanPerMeter.toExponential(2) + ' / ' + curvature.totalPerMeter.toExponential(2) + '\n' +
+          'Local relief: ' + hazard.localReliefMeters.toFixed(1) + ' m\n' +
+          'Slope > 10°: ' + (hazard.slopeExceedanceFractions.over10Deg * 100).toFixed(1) + '%\n' +
+          'Open sky: ' + (hazard.horizonExposure.openSkyFraction * 100).toFixed(1) + '%';
       } else {
         demDetails.textContent = 'Aspect, roughness, curvature, and hazard indicators are unavailable for this request.';
       }
@@ -603,10 +604,16 @@ async function initializeGlobe() {
     globe = await createMoonGlobe({
       viewport: document.querySelector('#globe-canvas'),
       pinLayer: document.querySelector('#globe-pins'),
-      onSelect: chooseGlobeSite
+      onSelect: chooseGlobeSite,
+      onRegionSelect(index, latitude, longitude) {
+        showRegionAbout(index);
+        updateSelectedSite(latitude, longitude);
+      }
     });
     globe.setSites(globeSites);
     updateGlobeSelection();
+    updateGlobeRegions();
+    if (activeAboutRegionIndex !== undefined) focusGlobeRegions([activeAboutRegionIndex]);
     globeStatus.hidden = true;
     globeReset.disabled = false;
   } catch (error) {
@@ -620,7 +627,9 @@ function showSiteView(isGlobe) {
   mapMode.setAttribute('aria-pressed', String(!isGlobe));
   globePanel.hidden = !isGlobe;
   map2d.hidden = isGlobe;
-  mapInstructions.textContent = isGlobe ? 'Choose a preset site on the globe or from the list.' :
+  (isGlobe ? globeStage : mapElement.parentElement).append(regionAboutPanel);
+  mapInstructions.textContent = isGlobe ?
+    'Choose a preset site or use Lunar regions to highlight areas on the globe.' :
     'Click the Moon to set coordinates, or use the controls below to highlight sites and regions.';
   if (!isGlobe) {
     lunarMap.updateSize();
@@ -887,6 +896,21 @@ function updateRegionSelection() {
     hideRegionAbout();
   }
   updateRegionHighlights();
+  updateGlobeRegions();
+}
+
+function updateGlobeRegions() {
+  if (!globe) return;
+  globe.setRegions([...selectedRegionIndexes].map(index => ({
+    index,
+    color: regionColor(index),
+    rings: regions[index].coordinates.map(ring => projectGeographicRing(ring, 'global'))
+  })));
+}
+
+function focusGlobeRegions(indexes) {
+  if (globePanel.hidden) return;
+  globe?.focusRegions(indexes.map(index => regions[index].coordinates[0]));
 }
 
 function validateRegions(payload) {
@@ -1037,6 +1061,7 @@ function renderRegionOptions() {
         }
         syncGroupCheckbox();
         updateRegionSelection();
+        if (checkbox.checked) focusGlobeRegions([index]);
       });
 
       const swatch = document.createElement('span');
@@ -1064,6 +1089,7 @@ function renderRegionOptions() {
         showRegionAbout(entries[0].index);
       }
       updateRegionSelection();
+      if (groupCheckbox.checked) focusGlobeRegions(entries.map(({ index }) => index));
     });
 
     syncGroupCheckbox();

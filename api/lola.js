@@ -121,49 +121,50 @@ function encodeSvgDataUrl(svg) {
   return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
 }
 
-function pickSpotValue(properties = {}) {
-  const candidates = [
-    properties.radius,
-    properties.radius_km,
-    properties.radiusKm,
-    properties.elevation,
-    properties.elevation_m,
-    properties.value
-  ];
-  for (const candidate of candidates) {
-    const numeric = Number(candidate);
-    if (Number.isFinite(numeric)) return numeric;
-  }
-  return NaN;
+function itemFootprintBounds(item) {
+  const bounds = item?.bbox;
+  if (!Array.isArray(bounds) || bounds.length < 4) return undefined;
+  const [minLon, minLat, maxLon, maxLat] = bounds.map(Number);
+  if (![minLon, minLat, maxLon, maxLat].every(Number.isFinite)) return undefined;
+  return [minLon, minLat, maxLon, maxLat];
 }
 
-function buildSpotPreview(points, bbox) {
+function itemContains(item, latitude, longitude) {
+  const bounds = itemFootprintBounds(item);
+  if (!bounds) return false;
+  return longitude >= bounds[0] && longitude <= bounds[2] && latitude >= bounds[1] && latitude <= bounds[3];
+}
+
+function buildSpotPreview(items, bbox, latitude, longitude) {
   const [minLon, minLat, maxLon, maxLat] = bbox;
   const width = 512;
   const height = 512;
   const lonSpan = Math.max(1e-6, maxLon - minLon);
   const latSpan = Math.max(1e-6, maxLat - minLat);
 
-  const values = points.map(point => point.value).filter(Number.isFinite);
-  const minValue = values.length ? Math.min(...values) : 0;
-  const maxValue = values.length ? Math.max(...values) : 1;
-  const valueSpan = Math.max(1e-9, maxValue - minValue);
-
-  const circles = points.map(point => {
-    const x = ((point.longitude - minLon) / lonSpan) * width;
-    const y = height - ((point.latitude - minLat) / latSpan) * height;
-    const normalized = Number.isFinite(point.value) ? (point.value - minValue) / valueSpan : 0.5;
-    const hue = 210 - normalized * 180;
-    return '<circle cx="' + x.toFixed(2) + '" cy="' + y.toFixed(2) + '" r="1.85" fill="hsl(' +
-      hue.toFixed(1) + ',85%,62%)" fill-opacity="0.82" />';
+  const rectangles = items.map(item => {
+    const bounds = itemFootprintBounds(item);
+    if (!bounds) return '';
+    const x = ((bounds[0] - minLon) / lonSpan) * width;
+    const y = height - ((bounds[3] - minLat) / latSpan) * height;
+    const rectangleWidth = ((bounds[2] - bounds[0]) / lonSpan) * width;
+    const rectangleHeight = ((bounds[3] - bounds[1]) / latSpan) * height;
+    const highlighted = itemContains(item, latitude, longitude);
+    return '<rect x="' + x.toFixed(2) + '" y="' + y.toFixed(2) + '" width="' + rectangleWidth.toFixed(2) +
+      '" height="' + rectangleHeight.toFixed(2) + '" fill="' + (highlighted ? 'rgba(255,195,132,0.22)' :
+      'rgba(188,228,247,0.16)') + '" stroke="' + (highlighted ? '#ffc384' : '#8ec7df') +
+      '" stroke-width="1.2" />';
   }).join('');
 
-  const label = points.length + ' spots';
+  const siteX = ((longitude - minLon) / lonSpan) * width;
+  const siteY = height - ((latitude - minLat) / latSpan) * height;
+  const label = items.length + ' tile' + (items.length === 1 ? '' : 's');
   const svg =
     '<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">' +
     '<defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0e1114"/>' +
     '<stop offset="1" stop-color="#151b21"/></linearGradient></defs>' +
-    '<rect width="512" height="512" fill="url(#bg)"/>' + circles +
+    '<rect width="512" height="512" fill="url(#bg)"/>' + rectangles +
+    '<circle cx="' + siteX.toFixed(2) + '" cy="' + siteY.toFixed(2) + '" r="4.2" fill="#ffc384" stroke="#101113" stroke-width="1.6"/>' +
     '<rect x="0.5" y="0.5" width="511" height="511" fill="none" stroke="#3b444f"/>' +
     '<text x="10" y="500" fill="#d0d6de" font-family="monospace" font-size="13">' + label + '</text>' +
     '</svg>';
@@ -172,7 +173,7 @@ function buildSpotPreview(points, bbox) {
 }
 
 async function fetchSpotObservations(latitude, longitude) {
-  const halfSpan = 0.18;
+  const halfSpan = 1.6;
   const bbox = [
     clamp(longitude - halfSpan, -180, 180),
     clamp(latitude - halfSpan, -90, 90),
@@ -188,22 +189,7 @@ async function fetchSpotObservations(latitude, longitude) {
   const payload = await fetchJsonWithRetry(url, 'LOLA spot STAC query');
   const features = Array.isArray(payload?.features) ? payload.features : [];
 
-  const points = features
-    .map(feature => {
-      const coordinates = feature?.geometry?.coordinates;
-      if (!Array.isArray(coordinates) || coordinates.length < 2) return undefined;
-      const longitudeValue = Number(coordinates[0]);
-      const latitudeValue = Number(coordinates[1]);
-      if (!Number.isFinite(longitudeValue) || !Number.isFinite(latitudeValue)) return undefined;
-      return {
-        longitude: longitudeValue,
-        latitude: latitudeValue,
-        value: pickSpotValue(feature?.properties)
-      };
-    })
-    .filter(Boolean);
-
-  if (!points.length) {
+  if (!features.length) {
     return {
       collectionId: lolaSpotCollectionId,
       title: 'LOLA Shot Observations',
@@ -214,12 +200,18 @@ async function fetchSpotObservations(latitude, longitude) {
     };
   }
 
+  const matching = features.find(item => itemContains(item, latitude, longitude)) ?? features[0];
+  const thumbnailUrl = matching?.assets?.thumbnail?.href;
+
   return {
     collectionId: lolaSpotCollectionId,
     title: 'LOLA Shot Observations',
-    count: points.length,
+    count: features.length,
     bbox,
-    previewDataUrl: buildSpotPreview(points, bbox),
+    previewDataUrl: typeof thumbnailUrl === 'string' && thumbnailUrl
+      ? thumbnailUrl
+      : buildSpotPreview(features, bbox, latitude, longitude),
+    selectedTileId: matching?.id,
     source: 'USGS Astrogeology STAC'
   };
 }
