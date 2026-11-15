@@ -10,6 +10,10 @@ function number(params, key) {
   return value ? Number(value) : NaN;
 }
 
+function moonLongitude(longitude) {
+  return ((longitude + 180) % 360 + 360) % 360 - 180;
+}
+
 function destination(latitude, longitude, azimuth, distance) {
   const angular = distance / moonRadius;
   const lat = latitude * Math.PI / 180;
@@ -19,12 +23,13 @@ function destination(latitude, longitude, azimuth, distance) {
     Math.cos(lat) * Math.sin(angular) * Math.cos(bearing));
   const targetLon = lon + Math.atan2(Math.sin(bearing) * Math.sin(angular) * Math.cos(lat),
     Math.cos(angular) - Math.sin(lat) * Math.sin(targetLat));
-  return [targetLon * 180 / Math.PI, targetLat * 180 / Math.PI];
+  return [moonLongitude(targetLon * 180 / Math.PI), targetLat * 180 / Math.PI];
 }
 
 function terrainUrl(latitude, longitude, azimuth) {
+  const siteLongitude = moonLongitude(longitude);
   const query = new URLSearchParams({
-    geometry: JSON.stringify({ paths: [[[longitude, latitude], destination(latitude, longitude, azimuth, rangeMeters)]] }),
+    geometry: JSON.stringify({ paths: [[[siteLongitude, latitude], destination(latitude, siteLongitude, azimuth, rangeMeters)]] }),
     geometryType: 'esriGeometryPolyline',
     sr: '104903',
     returnFirstValueOnly: 'true',
