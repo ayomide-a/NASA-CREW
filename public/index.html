@@ -42,7 +42,7 @@
         <div class="map-toolbar">
           <div>
             <h2 id="map-heading">Choose a lunar landing site</h2>
-            <p id="map-instructions">Click the Moon to set coordinates, or select sites below to highlight them.</p>
+            <p id="map-instructions">Click the Moon to set Site A, then add a second site to compare.</p>
           </div>
           <div class="map-mode" role="group" aria-label="Site selector view">
             <button type="button" id="map-mode" aria-pressed="true" aria-controls="map-2d">2D map</button>
@@ -77,7 +77,25 @@
                 <option value="south-pole">South pole</option>
               </select>
             </div>
-            <output id="map-coordinates" aria-live="polite">Lat −89.000° · Lon 0.000° E</output>
+          </div>
+        </div>
+        <div class="site-selection">
+          <div class="site-selection-heading">
+            <h3>Selected sites</h3>
+            <label class="compare-toggle"><input id="compare-enabled" type="checkbox">Compare two sites</label>
+          </div>
+          <div class="site-selection-grid">
+            <div class="site-coordinate-card">
+              <strong>Site A</strong>
+              <output id="site-a-coordinates" aria-live="polite">Lat −89.000° · Lon 0.000° E</output>
+              <small>Click the map or enter coordinates in Observation Setup.</small>
+            </div>
+            <div id="site-b-map-card" class="site-coordinate-card" hidden>
+              <strong>Site B</strong>
+              <output id="site-b-coordinates" aria-live="polite">Choose a point on the map or enter coordinates below.</output>
+              <button id="compare-map-pick" class="map-pick-button" type="button" aria-pressed="false">Choose Site B on map</button>
+              <p id="compare-map-status" class="field-hint" role="status" aria-live="polite" hidden></p>
+            </div>
           </div>
         </div>
       </div>
@@ -137,32 +155,40 @@
         <h2>Observation setup</h2>
         <form id="query-form">
           <fieldset>
-            <legend>Lunar site</legend>
+            <legend>Site A coordinates</legend>
             <div class="fields">
               <label>Latitude (°)<input type="number" name="latitude" min="-90" max="90" step="any" value="-89" required></label>
               <label>Longitude (° E)<input type="number" name="longitude" min="-180" max="360" step="any" value="0" required></label>
             </div>
             <label>Altitude (km)<input type="number" name="altitude" step="any" value="0" required></label>
           </fieldset>
-          <fieldset>
-            <legend>Compare sites</legend>
-            <label class="compare-toggle"><input id="compare-enabled" name="compareEnabled" type="checkbox">Compare with a second site</label>
-            <div id="compare-coordinates" class="fields" hidden>
+          <fieldset id="compare-coordinates" hidden>
+            <legend>Site B coordinates</legend>
+            <div class="fields">
               <label>Site B latitude (°)<input id="compare-latitude" name="compareLatitude" type="number" min="-90" max="90" step="any" required disabled></label>
               <label>Site B longitude (° E)<input id="compare-longitude" name="compareLongitude" type="number" min="-180" max="360" step="any" required disabled></label>
             </div>
-            <p class="field-hint">Both sites use the same altitude and observation window.</p>
+            <p class="field-hint">Map-selected coordinates appear here and can be edited.</p>
           </fieldset>
           <fieldset>
-            <legend>Time window <span class="unit-label">UTC</span></legend>
+            <legend>Time windows <span class="unit-label">UTC</span></legend>
+            <label id="separate-window-control" class="compare-toggle" hidden>
+              <input id="separate-windows" type="checkbox" disabled>Use a different time window for Site B
+            </label>
+            <p id="shared-window-note" class="field-hint" hidden>Site B will use Site A’s time window.</p>
             <div class="dates">
               <label>Start time<input type="datetime-local" name="start" value="2026-11-14T00:00" required></label>
               <label>Stop time<input type="datetime-local" name="stop" value="2026-11-16T00:00" required></label>
+            </div>
+            <div id="site-b-time-window" class="dates" hidden>
+              <label>Site B start time<input id="compare-start" name="compareStart" type="datetime-local" required disabled></label>
+              <label>Site B stop time<input id="compare-stop" name="compareStop" type="datetime-local" required disabled></label>
             </div>
             <div class="fields">
               <label>Step size<input type="number" name="step" min="1" step="1" value="6" required></label>
               <label>Unit<select name="unit"><option value="min">Minutes</option><option value="h" selected>Hours</option><option value="d">Days</option></select></label>
             </div>
+            <p class="field-hint">The step size and unit apply to both sites.</p>
           </fieldset>
         </form>
         <button id="run-observation" class="run" type="submit" form="query-form"><span>Run observation</span><span aria-hidden="true">→</span></button>
@@ -185,13 +211,30 @@
             <div class="sky-legend" aria-label="Chart targets">
               <span class="sun-color">Sun</span>
               <span class="earth-color">Earth</span>
-              <span class="site-key">Site A · solid</span>
-              <span id="site-b-key" class="site-key site-b-key" hidden>Site B · dashed</span>
             </div>
           </div>
-          <p class="chart-instruction">Click a Sun or Earth marker to zoom into its azimuth; click again to reset. The gray line shows terrain horizons.</p>
+          <p class="chart-instruction">Each graph shows one site. Click a Sun or Earth marker to zoom into its azimuth; click again to reset that graph. The gray line shows that site’s terrain horizon.</p>
           <div class="sky-view">
-            <canvas id="chart" role="img" aria-label="Sun azimuth and elevation against the lunar terrain horizon."></canvas>
+            <div class="sky-charts">
+              <section class="site-chart" aria-labelledby="site-a-chart-title">
+                <h4 id="site-a-chart-title">Site A</h4>
+                <canvas id="chart-a" role="img" aria-label="Site A Sun and Earth azimuth and elevation against its terrain horizon."></canvas>
+                <div id="site-a-playback" class="site-playback" hidden>
+                  <button type="button" id="playback-a" aria-pressed="false">Play</button>
+                  <input id="time-slider-a" type="range" min="0" max="0" value="0" step="1" aria-label="Site A observation time">
+                  <output id="current-reading-a" for="time-slider-a" aria-live="polite"></output>
+                </div>
+              </section>
+              <section id="site-b-chart-panel" class="site-chart" aria-labelledby="site-b-chart-title" hidden>
+                <h4 id="site-b-chart-title">Site B</h4>
+                <canvas id="chart-b" role="img" aria-label="Site B Sun and Earth azimuth and elevation against its terrain horizon."></canvas>
+                <div id="site-b-playback" class="site-playback" hidden>
+                  <button type="button" id="playback-b" aria-pressed="false">Play</button>
+                  <input id="time-slider-b" type="range" min="0" max="0" value="0" step="1" aria-label="Site B observation time">
+                  <output id="current-reading-b" for="time-slider-b" aria-live="polite"></output>
+                </div>
+              </section>
+            </div>
             <aside class="visibility" aria-label="Time above the terrain horizon">
               <h3>Site A · above terrain horizon</h3>
               <div class="visibility-items">
@@ -223,17 +266,17 @@
               </div>
             </aside>
           </div>
-          <div class="playback">
+          <div id="shared-playback" class="playback">
             <button type="button" id="playback" aria-pressed="false">Play</button>
             <input id="time-slider" type="range" min="0" max="0" value="0" step="1" aria-label="Observation time">
             <output id="current-reading" for="time-slider" aria-live="polite"></output>
-            <div class="playback-reading"><span id="selected-target-label" class="sun-color">Sun</span><output id="selected-reading"></output></div>
-            <div id="comparison-readings" class="comparison-readings" hidden>
-              <h3 id="comparison-site-label"></h3>
-              <div class="playback-readings">
-                <span class="sun-color">Sun <output id="compare-sun-reading"></output><small id="compare-sun-difference"></small></span>
-                <span class="earth-color">Earth <output id="compare-earth-reading"></output><small id="compare-earth-difference"></small></span>
-              </div>
+          </div>
+          <div class="playback-reading"><span id="selected-target-label" class="sun-color">Sun</span><output id="selected-reading"></output></div>
+          <div id="comparison-readings" class="comparison-readings" hidden>
+            <h3 id="comparison-site-label"></h3>
+            <div class="playback-readings">
+              <span class="sun-color">Sun <output id="compare-sun-reading"></output><small id="compare-sun-difference"></small></span>
+              <span class="earth-color">Earth <output id="compare-earth-reading"></output><small id="compare-earth-difference"></small></span>
             </div>
           </div>
           <p class="note">Azimuth is measured clockwise from north. Elevation is relative to the local horizon; terrain can block the line of sight.</p>

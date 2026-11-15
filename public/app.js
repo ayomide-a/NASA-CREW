@@ -12,11 +12,32 @@ const previous = document.querySelector('#previous');
 const next = document.querySelector('#next');
 const range = document.querySelector('#range');
 const comparisonTableHeaders = document.querySelectorAll('.comparison-column');
-const canvas = document.querySelector('#chart');
-const context = canvas.getContext('2d');
+const chartCanvases = {
+  a: document.querySelector('#chart-a'),
+  b: document.querySelector('#chart-b')
+};
+const chartContexts = {
+  a: chartCanvases.a.getContext('2d'),
+  b: chartCanvases.b.getContext('2d')
+};
 const slider = document.querySelector('#time-slider');
 const playback = document.querySelector('#playback');
 const reading = document.querySelector('#current-reading');
+const sharedPlayback = document.querySelector('#shared-playback');
+const sitePlayback = {
+  a: {
+    container: document.querySelector('#site-a-playback'),
+    slider: document.querySelector('#time-slider-a'),
+    button: document.querySelector('#playback-a'),
+    reading: document.querySelector('#current-reading-a')
+  },
+  b: {
+    container: document.querySelector('#site-b-playback'),
+    slider: document.querySelector('#time-slider-b'),
+    button: document.querySelector('#playback-b'),
+    reading: document.querySelector('#current-reading-b')
+  }
+};
 const selectedTargetLabel = document.querySelector('#selected-target-label');
 const selectedReading = document.querySelector('#selected-reading');
 const sunVisibilityPie = document.querySelector('#sun-visibility-pie');
@@ -47,7 +68,6 @@ const assessmentClose = document.querySelector('#assessment-close');
 const assessmentSiteA = document.querySelector('#assessment-site-a');
 const assessmentSiteB = document.querySelector('#assessment-site-b');
 const mapElement = document.querySelector('#map');
-const mapCoordinates = document.querySelector('#map-coordinates');
 const mapViewSelect = document.querySelector('#map-view');
 const map2d = document.querySelector('#map-2d');
 const mapOnlyElements = document.querySelectorAll('[data-map-only]');
@@ -86,6 +106,15 @@ const latitudeInput = form.elements.namedItem('latitude');
 const longitudeInput = form.elements.namedItem('longitude');
 const startInput = form.elements.namedItem('start');
 const stopInput = form.elements.namedItem('stop');
+const compareStartInput = document.querySelector('#compare-start');
+const compareStopInput = document.querySelector('#compare-stop');
+const separateWindowControl = document.querySelector('#separate-window-control');
+const separateWindows = document.querySelector('#separate-windows');
+const siteBTimeWindow = document.querySelector('#site-b-time-window');
+const sharedWindowNote = document.querySelector('#shared-window-note');
+const siteACoordinates = document.querySelector('#site-a-coordinates');
+const siteBCoordinates = document.querySelector('#site-b-coordinates');
+const siteBMapCard = document.querySelector('#site-b-map-card');
 const pageSize = 8;
 let result;
 let page = 0;
@@ -93,13 +122,17 @@ const compareEnabled = document.querySelector('#compare-enabled');
 const compareCoordinates = document.querySelector('#compare-coordinates');
 const compareLatitudeInput = document.querySelector('#compare-latitude');
 const compareLongitudeInput = document.querySelector('#compare-longitude');
+const compareMapPickButton = document.querySelector('#compare-map-pick');
+const compareMapStatus = document.querySelector('#compare-map-status');
 const comparisonReadings = document.querySelector('#comparison-readings');
 const comparisonSiteLabel = document.querySelector('#comparison-site-label');
 const compareSunReading = document.querySelector('#compare-sun-reading');
 const compareEarthReading = document.querySelector('#compare-earth-reading');
 const compareSunDifference = document.querySelector('#compare-sun-difference');
 const compareEarthDifference = document.querySelector('#compare-earth-difference');
-const siteBKey = document.querySelector('#site-b-key');
+const siteBChartPanel = document.querySelector('#site-b-chart-panel');
+const siteAChartTitle = document.querySelector('#site-a-chart-title');
+const siteBChartTitle = document.querySelector('#site-b-chart-title');
 const siteRecommendation = document.querySelector('#site-recommendation');
 const recommendationTitle = document.querySelector('#recommendation-title');
 const recommendationDetails = document.querySelector('#recommendation-details');
@@ -107,8 +140,10 @@ let comparisonResult;
 let comparisonParams;
 let resultParams;
 let assessmentSite = 'a';
-let currentIndex = 0;
+const currentIndices = { a: 0, b: 0 };
 let playbackTimer;
+const sitePlaybackTimers = { a: undefined, b: undefined };
+let comparisonUsesSeparateWindows = false;
 let pointsOfInterest = [];
 let globeSites = [];
 let globe;
@@ -120,7 +155,7 @@ let regions = [];
 const selectedRegionIndexes = new Set();
 let activeRegionIndex;
 let activeAboutRegionIndex;
-let chartZoom;
+const chartZoom = { a: undefined, b: undefined };
 let lolaRequest;
 const lolaTileViews = [];
 let lolaTileViewIndex = 0;
@@ -153,6 +188,7 @@ function cycleLolaTileView(direction) {
 
 lolaPrevView?.addEventListener('click', () => cycleLolaTileView(-1));
 lolaNextView?.addEventListener('click', () => cycleLolaTileView(1));
+let isPickingComparisonSite = false;
 
 const lunarExtent = [-180, -90, 180, 90];
 const lunarProjection = new ol.proj.Projection({
@@ -197,7 +233,7 @@ function createImageryLayer(url, projection, spatialReference) {
     }
   });
   source.on('imageloaderror', () => {
-    mapCoordinates.textContent = 'Lunar imagery could not be loaded. You can still select coordinates.';
+    lolaStatus.textContent = 'Lunar imagery could not be loaded. You can still select coordinates.';
   });
   return new ol.layer.Image({ source });
 }
@@ -297,21 +333,34 @@ const lunarMap = new ol.Map({
     }),
     new ol.layer.Vector({
       source: markerSource,
-      style: [
-        new ol.style.Style({
-          image: new ol.style.Circle({
-            radius: 11,
-            fill: new ol.style.Fill({ color: 'rgba(255, 195, 132, 0.2)' })
+      style: feature => {
+        const color = feature.get('site') === 'B' ? '#bce4f7' : '#ffc384';
+        const halo = feature.get('site') === 'B'
+          ? 'rgba(188, 228, 247, 0.2)'
+          : 'rgba(255, 195, 132, 0.2)';
+        return [
+          new ol.style.Style({
+            image: new ol.style.Circle({
+              radius: 11,
+              fill: new ol.style.Fill({ color: halo })
+            })
+          }),
+          new ol.style.Style({
+            image: new ol.style.Circle({
+              radius: 6,
+              fill: new ol.style.Fill({ color }),
+              stroke: new ol.style.Stroke({ color: '#101113', width: 2 })
+            }),
+            text: new ol.style.Text({
+              text: feature.get('site'),
+              offsetY: -14,
+              font: '600 10px "DM Sans", sans-serif',
+              fill: new ol.style.Fill({ color }),
+              stroke: new ol.style.Stroke({ color: '#101113', width: 3 })
+            })
           })
-        }),
-        new ol.style.Style({
-          image: new ol.style.Circle({
-            radius: 6,
-            fill: new ol.style.Fill({ color: '#ffc384' }),
-            stroke: new ol.style.Stroke({ color: '#101113', width: 2 })
-          })
-        })
-      ]
+        ];
+      }
     })
   ],
   view: createMapView('global')
@@ -439,20 +488,65 @@ function selectPoiSite(site) {
   updateObservationWindow(site);
 }
 
+function validSiteCoordinates(latitudeField, longitudeField) {
+  const latitude = Number(latitudeField.value);
+  const longitude = Number(longitudeField.value);
+  if (!latitudeField.value.trim() || !longitudeField.value.trim() ||
+      !Number.isFinite(latitude) || latitude < -90 || latitude > 90 ||
+      !Number.isFinite(longitude) || longitude < -180 || longitude > 360) {
+    return undefined;
+  }
+  return { latitude, longitude };
+}
+
+function updateMapMarkers() {
+  updateSiteCoordinateLabels();
+  markerSource.clear();
+  const mapView = mapViewSelect.value;
+  const extent = mapView === 'global' ? lunarExtent : northPolarExtent;
+  const sites = [
+    { label: 'A', coordinates: validSiteCoordinates(latitudeInput, longitudeInput) },
+    {
+      label: 'B',
+      coordinates: compareEnabled.checked
+        ? validSiteCoordinates(compareLatitudeInput, compareLongitudeInput)
+        : undefined
+    }
+  ];
+
+  for (const { label, coordinates } of sites) {
+    if (!coordinates) continue;
+    const point = coordinateForSite(coordinates.latitude, coordinates.longitude, mapView);
+    if (point[0] < extent[0] || point[0] > extent[2] ||
+        point[1] < extent[1] || point[1] > extent[3]) continue;
+    const feature = new ol.Feature(new ol.geom.Point(point));
+    feature.set('site', label);
+    markerSource.addFeature(feature);
+  }
+}
+
+function formatSiteCoordinates(coordinates) {
+  const longitude = eastLongitude(coordinates.longitude);
+  return 'Lat ' + coordinates.latitude.toFixed(3) + '° · Lon ' + longitude.toFixed(3) + '° E';
+}
+
+function updateSiteCoordinateLabels() {
+  const siteA = validSiteCoordinates(latitudeInput, longitudeInput);
+  const siteB = validSiteCoordinates(compareLatitudeInput, compareLongitudeInput);
+  siteACoordinates.textContent = siteA
+    ? formatSiteCoordinates(siteA)
+    : 'Enter valid coordinates in Observation Setup.';
+  siteBCoordinates.textContent = siteB
+    ? formatSiteCoordinates(siteB)
+    : 'Choose a point on the map or enter coordinates below.';
+}
+
 function updateSelectedSite(latitude, longitude) {
   const longitudeEast = eastLongitude(longitude);
   latitudeInput.value = latitude.toFixed(6);
   longitudeInput.value = longitudeEast.toFixed(6);
-  mapCoordinates.textContent = 'Lat ' + latitude.toFixed(3) + '° · Lon ' + longitudeEast.toFixed(3) + '° E';
   updateGlobeSelection();
-  markerSource.clear();
-  const mapView = mapViewSelect.value;
-  const coordinate = coordinateForSite(latitude, longitudeEast, mapView);
-  const extent = mapView === 'global' ? lunarExtent : northPolarExtent;
-  if (coordinate[0] >= extent[0] && coordinate[0] <= extent[2] &&
-      coordinate[1] >= extent[1] && coordinate[1] <= extent[3]) {
-    markerSource.addFeature(new ol.Feature(new ol.geom.Point(coordinate)));
-  }
+  updateMapMarkers();
   updateLolaDem(latitude, longitudeEast);
 }
 
@@ -544,17 +638,13 @@ function updateLolaDem(latitude, longitudeEast) {
 }
 
 function updateMarkerFromInputs() {
-  const latitude = Number(latitudeInput.value);
-  const longitude = Number(longitudeInput.value);
-  if (!latitudeInput.value.trim() || !longitudeInput.value.trim() ||
-      !Number.isFinite(latitude) || latitude < -90 || latitude > 90 ||
-      !Number.isFinite(longitude) || longitude < -180 || longitude > 360) {
-    markerSource.clear();
+  const coordinates = validSiteCoordinates(latitudeInput, longitudeInput);
+  if (!coordinates) {
     highlightGlobeSite();
-    mapCoordinates.textContent = 'Enter valid coordinates to place the marker.';
+    updateMapMarkers();
     return;
   }
-  updateSelectedSite(latitude, longitude);
+  updateSelectedSite(coordinates.latitude, coordinates.longitude);
 }
 
 function highlightGlobeSite(site) {
@@ -632,7 +722,7 @@ function showSiteView(isGlobe) {
   (isGlobe ? globeStage : map2d).append(regionAboutPanel);
   mapInstructions.textContent = isGlobe ?
     'Choose a preset site or use Lunar regions to highlight areas on the globe.' :
-    'Click the Moon to set coordinates, or select sites below to highlight them.';
+    'Click the Moon to set Site A, then add a second site to compare.';
   if (isGlobe) globeInitialization ??= initializeGlobe();
   else lunarMap.updateSize();
 }
@@ -1204,20 +1294,33 @@ lunarMap.on('singleclick', event => {
     }
     return undefined;
   }, { hitTolerance: 8 });
-  if (clickedPoi) {
+  if (clickedPoi && !isPickingComparisonSite) {
     hideRegionPopup();
     const site = pointsOfInterest[clickedPoi.get('poiIndex')];
     selectPoiSite(site);
     return;
   }
-  const [longitude, latitude] = mapViewSelect.value === 'global' ?
-    event.coordinate : polarToGeographic(event.coordinate, mapViewSelect.value === 'north-pole' ? 'north' : 'south');
+  const poiSite = clickedPoi && pointsOfInterest[clickedPoi.get('poiIndex')];
+  const [longitude, latitude] = poiSite
+    ? [poiSite.longitude, poiSite.latitude]
+    : mapViewSelect.value === 'global'
+      ? event.coordinate
+      : polarToGeographic(event.coordinate, mapViewSelect.value === 'north-pole' ? 'north' : 'south');
   if (clickedRegion) {
     const regionIndex = clickedRegion.get('regionIndex');
     showRegionPopup(regionIndex, event.coordinate);
     showRegionAbout(regionIndex);
   } else {
     hideRegionPopup();
+  }
+  if (isPickingComparisonSite) {
+    const longitudeEast = eastLongitude(longitude);
+    compareLatitudeInput.value = latitude.toFixed(6);
+    compareLongitudeInput.value = longitudeEast.toFixed(6);
+    updateMapMarkers();
+    setComparisonMapPicking(false, 'Site B set to Lat ' + latitude.toFixed(3) +
+      '°, Lon ' + longitudeEast.toFixed(3) + '° E.');
+    return;
   }
   updateSelectedSite(latitude, longitude);
 });
@@ -1226,39 +1329,53 @@ longitudeInput.addEventListener('change', updateMarkerFromInputs);
 globeMode.addEventListener('click', () => showSiteView(true));
 mapMode.addEventListener('click', () => showSiteView(false));
 globeReset.addEventListener('click', () => globe?.focus());
+compareLatitudeInput.addEventListener('input', updateMapMarkers);
+compareLongitudeInput.addEventListener('input', updateMapMarkers);
 updateMarkerFromInputs();
 
-function renderTable() {
-  const start = page * pageSize;
-  const end = Math.min(start + pageSize, result.rows.length);
-  const items = result.rows.slice(start, end).map(({ time, sun, earth }, index) => {
-    const row = document.createElement('tr');
-    const terrain = result.terrain ? terrainAtAzimuth(result.terrain.horizons, sun.azimuth) : undefined;
-    const earthTerrain = result.terrain ? terrainAtAzimuth(result.terrain.horizons, earth.azimuth) : undefined;
-    const terrainLabel = (position, horizon) => horizon
-      ? (position.elevation >= 0 && position.elevation <= horizon.horizonElevation ? 'Blocked' : 'Clear') +
-        ' · horizon ' + horizon.horizonElevation.toFixed(2) + '°'
-      : 'Unavailable';
-    const values = [
-      time.slice(0, 16).replace('T', ' '),
-      sun.azimuth.toFixed(6),
-      sun.elevation.toFixed(6),
-      terrainLabel(sun, terrain),
-      earth.azimuth.toFixed(6),
-      earth.elevation.toFixed(6),
-      terrainLabel(earth, earthTerrain)
-    ];
-    if (comparisonResult) {
-      const comparison = comparisonResult.rows[start + index];
-      const compareSunTerrain = comparisonResult.terrain
-        ? terrainAtAzimuth(comparisonResult.terrain.horizons, comparison.sun.azimuth) : undefined;
-      const compareEarthTerrain = comparisonResult.terrain
-        ? terrainAtAzimuth(comparisonResult.terrain.horizons, comparison.earth.azimuth) : undefined;
-      values.push(comparison.sun.azimuth.toFixed(6), comparison.sun.elevation.toFixed(6),
-        terrainLabel(comparison.sun, compareSunTerrain),
-        comparison.earth.azimuth.toFixed(6), comparison.earth.elevation.toFixed(6),
-        terrainLabel(comparison.earth, compareEarthTerrain));
+function alignedResultRows() {
+  const rowsByTime = new Map();
+  for (const sample of result.rows) {
+    rowsByTime.set(sample.time, { time: sample.time, siteA: sample });
+  }
+  if (comparisonResult) {
+    for (const sample of comparisonResult.rows) {
+      const aligned = rowsByTime.get(sample.time) ?? { time: sample.time };
+      aligned.siteB = sample;
+      rowsByTime.set(sample.time, aligned);
     }
+  }
+  return [...rowsByTime.values()].sort((first, second) => first.time.localeCompare(second.time));
+}
+
+function tableSiteValues(siteResult, sample) {
+  if (!sample) return ['—', '—', '—', '—', '—', '—'];
+  const terrainLabel = (position, horizon) => horizon
+    ? (position.elevation >= 0 && position.elevation <= horizon.horizonElevation ? 'Blocked' : 'Clear') +
+      ' · horizon ' + horizon.horizonElevation.toFixed(2) + '°'
+    : 'Unavailable';
+  const sunTerrain = siteResult.terrain
+    ? terrainAtAzimuth(siteResult.terrain.horizons, sample.sun.azimuth) : undefined;
+  const earthTerrain = siteResult.terrain
+    ? terrainAtAzimuth(siteResult.terrain.horizons, sample.earth.azimuth) : undefined;
+  return [
+    sample.sun.azimuth.toFixed(6),
+    sample.sun.elevation.toFixed(6),
+    terrainLabel(sample.sun, sunTerrain),
+    sample.earth.azimuth.toFixed(6),
+    sample.earth.elevation.toFixed(6),
+    terrainLabel(sample.earth, earthTerrain)
+  ];
+}
+
+function renderTable() {
+  const rows = alignedResultRows();
+  const start = page * pageSize;
+  const end = Math.min(start + pageSize, rows.length);
+  const items = rows.slice(start, end).map(({ time, siteA, siteB }) => {
+    const row = document.createElement('tr');
+    const values = [time.slice(0, 16).replace('T', ' '), ...tableSiteValues(result, siteA)];
+    if (comparisonResult) values.push(...tableSiteValues(comparisonResult, siteB));
     for (const value of values) {
       const cell = row.insertCell();
       cell.textContent = value;
@@ -1266,9 +1383,9 @@ function renderTable() {
     return row;
   });
   table.replaceChildren(...items);
-  range.textContent = (start + 1) + '–' + end + ' of ' + result.rows.length;
+  range.textContent = (start + 1) + '–' + end + ' of ' + rows.length;
   previous.disabled = page === 0;
-  next.disabled = end === result.rows.length;
+  next.disabled = end === rows.length;
 }
 
 function terrainAtAzimuth(horizons, azimuth) {
@@ -1283,10 +1400,14 @@ function terrainAtAzimuth(horizons, azimuth) {
 loadPointsOfInterest();
 loadRegions();
 
-function drawChart() {
+function drawChart(siteKey) {
+  const canvas = chartCanvases[siteKey];
+  const context = chartContexts[siteKey];
+  const siteResult = siteKey === 'b' ? comparisonResult : result;
+  const zoom = chartZoom[siteKey];
   const width = canvas.clientWidth;
   const height = canvas.clientHeight;
-  if (!context || !width || !height || !result?.rows.length) return;
+  if (!context || !width || !height || !siteResult?.rows.length) return;
   const ratio = window.devicePixelRatio || 1;
   canvas.width = width * ratio;
   canvas.height = height * ratio;
@@ -1298,33 +1419,31 @@ function drawChart() {
   const sunColor = style.getPropertyValue('--accent').trim();
   const earthColor = style.getPropertyValue('--moonlight').trim();
   const plot = { left: 58, right: width - 18, top: 18, bottom: height - 50 };
-  const viewCenter = chartZoom?.center ?? 180;
-  const viewSpan = chartZoom ? 60 : 360;
+  const viewCenter = zoom?.center ?? 180;
+  const viewSpan = zoom ? 60 : 360;
   const relativeAzimuth = azimuth => ((azimuth - viewCenter + 540) % 360) - 180 + viewCenter;
   const x = azimuth => plot.left + (relativeAzimuth(azimuth) - (viewCenter - viewSpan / 2)) / viewSpan * (plot.right - plot.left);
-  const zoomValues = chartZoom ? [
-    ...result[chartZoom.target].rows.filter(row => Math.abs(relativeAzimuth(row.azimuth) - viewCenter) <= viewSpan / 2).map(row => row.elevation),
-    ...(result.terrain?.horizons ?? []).filter(point => Math.abs(relativeAzimuth(point.azimuth) - viewCenter) <= viewSpan / 2).map(point => point.horizonElevation),
-    ...(comparisonResult?.[chartZoom.target].rows ?? []).filter(row => Math.abs(relativeAzimuth(row.azimuth) - viewCenter) <= viewSpan / 2).map(row => row.elevation),
-    ...(comparisonResult?.terrain?.horizons ?? []).filter(point => Math.abs(relativeAzimuth(point.azimuth) - viewCenter) <= viewSpan / 2).map(point => point.horizonElevation)
+  const zoomValues = zoom ? [
+    ...siteResult[zoom.target].rows.filter(row => Math.abs(relativeAzimuth(row.azimuth) - viewCenter) <= viewSpan / 2).map(row => row.elevation),
+    ...(siteResult.terrain?.horizons ?? []).filter(point => Math.abs(relativeAzimuth(point.azimuth) - viewCenter) <= viewSpan / 2).map(point => point.horizonElevation)
   ] : [];
   const zoomMinimum = zoomValues.length ? Math.max(-90, Math.min(...zoomValues) - 3) : -90;
   const zoomMaximum = zoomValues.length ? Math.min(90, Math.max(...zoomValues) + 3) : 90;
-  const yMinimum = chartZoom ? zoomMinimum : -90;
-  const yMaximum = chartZoom ? zoomMaximum : 90;
+  const yMinimum = zoom ? zoomMinimum : -90;
+  const yMaximum = zoom ? zoomMaximum : 90;
   const y = elevation => plot.bottom - (Math.max(yMinimum, Math.min(yMaximum, elevation)) - yMinimum) / (yMaximum - yMinimum) * (plot.bottom - plot.top);
 
-  function drawTerrainHorizon(siteResult, isComparison) {
+  function drawTerrainHorizon() {
     const horizons = siteResult.terrain?.horizons;
     if (!horizons?.length) return;
     context.beginPath();
     context.strokeStyle = '#c8cdd2';
     context.lineWidth = 3;
-    context.setLineDash(isComparison ? [2, 5] : [8, 5]);
+    context.setLineDash([8, 5]);
     let started = false;
     let previousAzimuth;
     horizons.map(point => ({ point, azimuth: relativeAzimuth(point.azimuth) }))
-      .filter(({ azimuth }) => !chartZoom ||
+      .filter(({ azimuth }) => !zoom ||
         (azimuth >= viewCenter - viewSpan / 2 && azimuth <= viewCenter + viewSpan / 2))
       .sort((first, second) => first.azimuth - second.azimuth)
       .forEach(({ point, azimuth }) => {
@@ -1352,7 +1471,7 @@ function drawChart() {
   context.fillStyle = muted;
   context.textBaseline = 'middle';
   context.textAlign = 'right';
-  const elevationTicks = chartZoom
+  const elevationTicks = zoom
     ? Array.from({ length: 5 }, (_, index) => yMinimum + (yMaximum - yMinimum) * index / 4)
     : [-90, -60, -30, 0, 30, 60, 90];
   for (const elevation of elevationTicks) {
@@ -1363,11 +1482,11 @@ function drawChart() {
     context.moveTo(plot.left, position);
     context.lineTo(plot.right, position);
     context.stroke();
-    context.fillText((chartZoom ? elevation.toFixed(1) : elevation) + '°', plot.left - 8, position);
+    context.fillText((zoom ? elevation.toFixed(1) : elevation) + '°', plot.left - 8, position);
   }
   context.setLineDash([]);
 
-  const azimuthLabels = chartZoom
+  const azimuthLabels = zoom
     ? [-30, -15, 0, 15, 30].map(offset => Math.round((viewCenter + offset + 360) % 360) + '°')
     : ['0° N', '90° E', '180° S', '270° W', '360° N'];
   context.textAlign = 'center';
@@ -1390,15 +1509,10 @@ function drawChart() {
   context.fillText('Elevation', 0, 0);
   context.restore();
 
-  const plottedTargets = chartZoom ? [chartZoom.target] : ['sun', 'earth'];
-  const traces = plottedTargets.flatMap(target => {
+  const plottedTargets = zoom ? [zoom.target] : ['sun', 'earth'];
+  for (const target of plottedTargets) {
     const color = target === 'sun' ? sunColor : earthColor;
-    const siteATrace = { rows: result[target].rows, color, isComparison: false };
-    return comparisonResult
-      ? [siteATrace, { rows: comparisonResult[target].rows, color, isComparison: true }]
-      : [siteATrace];
-  });
-  for (const { rows, color, isComparison } of traces) {
+    const rows = siteResult[target].rows;
     const aboveSegments = [];
     const belowSegments = [];
     const addSegment = (segments, start, end) => {
@@ -1432,69 +1546,61 @@ function drawChart() {
       context.beginPath();
       context.strokeStyle = color;
       context.globalAlpha = opacity;
-      context.lineWidth = isComparison ? 2 : 1.5;
-      context.setLineDash(isComparison ? [6, 4] : []);
+      context.lineWidth = 1.5;
       for (const [startX, startY, endX, endY] of segments) {
         context.moveTo(startX, startY);
         context.lineTo(endX, endY);
       }
       context.stroke();
-      context.setLineDash([]);
     }
     context.globalAlpha = 1;
   }
 
-  const currentTargets = chartZoom ? [chartZoom.target] : ['sun', 'earth'];
-  const currentTracks = currentTargets.flatMap(target => {
+  const currentTargets = zoom ? [zoom.target] : ['sun', 'earth'];
+  for (const target of currentTargets) {
     const color = target === 'sun' ? sunColor : earthColor;
-    const siteATrack = { row: result.rows[currentIndex][target], color, isComparison: false };
-    return comparisonResult
-      ? [siteATrack, { row: comparisonResult.rows[currentIndex][target], color, isComparison: true }]
-      : [siteATrack];
-  });
-  for (const { row, color, isComparison } of currentTracks) {
+    const row = siteResult.rows[currentIndices[siteKey]][target];
     context.globalAlpha = row.elevation < 0 ? 0.35 : 1;
     context.beginPath();
-    context.arc(x(row.azimuth), y(row.elevation), isComparison ? 8 : 7, 0, 2 * Math.PI);
-    context.fillStyle = isComparison ? '#17191c' : color;
+    context.arc(x(row.azimuth), y(row.elevation), 7, 0, 2 * Math.PI);
+    context.fillStyle = color;
     context.shadowColor = color;
-    context.shadowBlur = isComparison ? 0 : row.elevation < 0 ? 4 : 12;
+    context.shadowBlur = row.elevation < 0 ? 4 : 12;
     context.fill();
     context.shadowBlur = 0;
-    context.strokeStyle = isComparison ? color : edge;
-    context.lineWidth = isComparison ? 2 : 1;
+    context.strokeStyle = edge;
+    context.lineWidth = 1;
     context.stroke();
     context.globalAlpha = 1;
   }
-  drawTerrainHorizon(result, false);
-  if (comparisonResult) drawTerrainHorizon(comparisonResult, true);
+  drawTerrainHorizon();
 }
 
-canvas.addEventListener('click', event => {
-  if (!result?.rows.length) return;
-  const bounds = canvas.getBoundingClientRect();
-  const plotLeft = 58;
-  const plotRight = canvas.clientWidth - 18;
-  const clickAzimuth = chartZoom
-    ? chartZoom.center - 30 + (event.clientX - bounds.left - plotLeft) / (plotRight - plotLeft) * 60
-    : (event.clientX - bounds.left - plotLeft) / (plotRight - plotLeft) * 360;
-  const angularDistance = azimuth => Math.abs(((azimuth - clickAzimuth + 540) % 360) - 180);
-  if (chartZoom) chartZoom = undefined;
-  else {
-    const currentRows = [
-      { target: 'sun', row: result.rows[currentIndex].sun },
-      { target: 'earth', row: result.rows[currentIndex].earth },
-      ...(comparisonResult ? [
-        { target: 'sun', row: comparisonResult.rows[currentIndex].sun },
-        { target: 'earth', row: comparisonResult.rows[currentIndex].earth }
-      ] : [])
-    ];
-    const selected = currentRows.find(item => angularDistance(item.row.azimuth) <= 8);
-    if (!selected) return;
-    chartZoom = { target: selected.target, center: selected.row.azimuth };
-  }
-  updateCurrentReading();
-});
+for (const [siteKey, canvas] of Object.entries(chartCanvases)) {
+  canvas.addEventListener('click', event => {
+    const siteResult = siteKey === 'b' ? comparisonResult : result;
+    if (!siteResult?.rows.length) return;
+    const bounds = canvas.getBoundingClientRect();
+    const plotLeft = 58;
+    const plotRight = canvas.clientWidth - 18;
+    const zoom = chartZoom[siteKey];
+    const clickAzimuth = zoom
+      ? zoom.center - 30 + (event.clientX - bounds.left - plotLeft) / (plotRight - plotLeft) * 60
+      : (event.clientX - bounds.left - plotLeft) / (plotRight - plotLeft) * 360;
+    const angularDistance = azimuth => Math.abs(((azimuth - clickAzimuth + 540) % 360) - 180);
+    if (zoom) chartZoom[siteKey] = undefined;
+    else {
+      const currentRows = [
+        { target: 'sun', row: siteResult.rows[currentIndices[siteKey]].sun },
+        { target: 'earth', row: siteResult.rows[currentIndices[siteKey]].earth }
+      ];
+      const selected = currentRows.find(item => angularDistance(item.row.azimuth) <= 8);
+      if (!selected) return;
+      chartZoom[siteKey] = { target: selected.target, center: selected.row.azimuth };
+    }
+    updateCurrentReading();
+  });
+}
 
 function elevationAt(time, rows) {
   if (time <= Date.parse(rows[0].time)) return rows[0].elevation;
@@ -1529,10 +1635,10 @@ function terrainHorizonAt(time, target, siteResult = result) {
   return terrainAtAzimuth(siteResult.terrain.horizons, rows[rows.length - 1][target].azimuth)?.horizonElevation ?? 0;
 }
 
-function updateVisibility(params) {
-  const start = Date.parse(params.get('start') + ':00Z');
-  const stop = Date.parse(params.get('stop') + ':00Z');
-  const updateTargetVisibility = (label, target, rows, pie, value, duration, siteResult) => {
+function updateVisibility(params, comparisonSiteParams = params) {
+  const updateTargetVisibility = (label, target, rows, pie, value, duration, siteResult, siteParams) => {
+    const start = Date.parse(siteParams.get('start') + ':00Z');
+    const stop = Date.parse(siteParams.get('stop') + ':00Z');
     const times = [start, ...rows.map(row => Date.parse(row.time)).filter(time => time > start && time < stop), stop];
     let above = 0;
     for (let index = 1; index < times.length; index += 1) {
@@ -1557,6 +1663,7 @@ function updateVisibility(params) {
   const sites = [{
     label: 'Site A',
     result,
+    params,
     sun: [sunVisibilityPie, sunVisibilityValue, sunVisibilityDuration],
     earth: [earthVisibilityPie, earthVisibilityValue, earthVisibilityDuration]
   }];
@@ -1564,13 +1671,14 @@ function updateVisibility(params) {
     sites.push({
       label: 'Site B',
       result: comparisonResult,
+      params: comparisonSiteParams,
       sun: [compareSunVisibilityPie, compareSunVisibilityValue, compareSunVisibilityDuration],
       earth: [compareEarthVisibilityPie, compareEarthVisibilityValue, compareEarthVisibilityDuration]
     });
   }
   for (const site of sites) {
-    site.sunPercent = updateTargetVisibility(site.label + ' Sun', 'sun', site.result.sun.rows, ...site.sun, site.result);
-    site.earthPercent = updateTargetVisibility(site.label + ' Earth', 'earth', site.result.earth.rows, ...site.earth, site.result);
+    site.sunPercent = updateTargetVisibility(site.label + ' Sun', 'sun', site.result.sun.rows, ...site.sun, site.result, site.params);
+    site.earthPercent = updateTargetVisibility(site.label + ' Earth', 'earth', site.result.earth.rows, ...site.earth, site.result, site.params);
     site.score = (site.sunPercent + site.earthPercent) / 2;
   }
   return sites;
@@ -1678,51 +1786,90 @@ window.addEventListener('keydown', event => {
   if (event.key === 'Escape' && !assessmentModal.hidden) closeAssessmentModal();
 });
 
+function isSeparateWindowComparison() {
+  return Boolean(comparisonResult && comparisonUsesSeparateWindows);
+}
+
+function rowTimeLabel(row) {
+  return row.time.slice(0, 16).replace('T', ' ') + ' UTC';
+}
+
 function updateCurrentReading() {
-  currentIndex = Number(slider.value);
-  const { time, sun, earth } = result.rows[currentIndex];
-  const current = chartZoom ? result.rows[currentIndex][chartZoom.target] : result.rows[currentIndex].sun;
-  const timeLabel = time.slice(0, 16).replace('T', ' ') + ' UTC';
+  if (isSeparateWindowComparison()) {
+    currentIndices.a = Number(sitePlayback.a.slider.value);
+    currentIndices.b = Number(sitePlayback.b.slider.value);
+  } else {
+    currentIndices.a = Number(slider.value);
+    currentIndices.b = currentIndices.a;
+  }
+  const { time, sun, earth } = result.rows[currentIndices.a];
+  const siteAZoom = chartZoom.a;
+  const current = siteAZoom ? result.rows[currentIndices.a][siteAZoom.target] : result.rows[currentIndices.a].sun;
+  const timeLabel = rowTimeLabel({ time });
   reading.textContent = timeLabel;
+  sitePlayback.a.reading.textContent = timeLabel;
   const horizon = result.terrain ? terrainAtAzimuth(result.terrain.horizons, current.azimuth)?.horizonElevation : 0;
   const blocked = current.elevation >= 0 && current.elevation <= horizon;
-  if (chartZoom) {
-    selectedTargetLabel.textContent = chartZoom.target === 'sun' ? 'Sun' : 'Earth';
-    selectedTargetLabel.className = chartZoom.target === 'sun' ? 'sun-color' : 'earth-color';
+  if (siteAZoom) {
+    selectedTargetLabel.textContent = siteAZoom.target === 'sun' ? 'Sun' : 'Earth';
+    selectedTargetLabel.className = siteAZoom.target === 'sun' ? 'sun-color' : 'earth-color';
     selectedReading.textContent = current.azimuth.toFixed(1) + '° az · ' + current.elevation.toFixed(1) +
       '° el · ' + (blocked ? 'Blocked' : 'Clear') + ' · horizon ' + horizon.toFixed(1) + '°';
   } else {
     selectedTargetLabel.textContent = 'Sun + Earth';
     selectedTargetLabel.className = 'sun-color';
-    selectedReading.textContent = 'Click a marker to zoom';
+    selectedReading.textContent = 'Click a marker to zoom in its graph';
   }
   let accessibleReadings = timeLabel + ', Site A Sun azimuth ' + sun.azimuth.toFixed(1) +
     ' degrees, elevation ' + sun.elevation.toFixed(1) + ' degrees; Earth azimuth ' +
     earth.azimuth.toFixed(1) + ' degrees, elevation ' + earth.elevation.toFixed(1) + ' degrees';
-  let chartDescription = 'At ' + timeLabel + ', Site A Sun azimuth ' + sun.azimuth.toFixed(1) +
-    ' degrees and elevation ' + sun.elevation.toFixed(1) + ' degrees; Earth azimuth ' +
-    earth.azimuth.toFixed(1) + ' degrees and elevation ' + earth.elevation.toFixed(1) + ' degrees.';
   if (comparisonResult) {
-    const comparison = comparisonResult.rows[currentIndex];
+    const comparison = comparisonResult.rows[currentIndices.b];
+    const comparisonTimeLabel = rowTimeLabel(comparison);
+    const sameTime = comparison.time === time;
+    sitePlayback.b.reading.textContent = comparisonTimeLabel;
+    comparisonSiteLabel.textContent = 'Site B · ' + comparisonParams.get('latitude') + '°, ' +
+      comparisonParams.get('longitude') + '° E · ' + comparisonTimeLabel;
     const formatDifference = value => (value > 0 ? '+' : '') + value.toFixed(1) + '°';
     const sunAzimuthDifference = ((comparison.sun.azimuth - sun.azimuth + 540) % 360) - 180;
     const earthAzimuthDifference = ((comparison.earth.azimuth - earth.azimuth + 540) % 360) - 180;
     compareSunReading.textContent = comparison.sun.azimuth.toFixed(1) + '° az · ' + comparison.sun.elevation.toFixed(1) + '° el';
     compareEarthReading.textContent = comparison.earth.azimuth.toFixed(1) + '° az · ' + comparison.earth.elevation.toFixed(1) + '° el';
-    compareSunDifference.textContent = 'Δ vs A: ' + formatDifference(sunAzimuthDifference) + ' az · ' +
-      formatDifference(comparison.sun.elevation - sun.elevation) + ' el';
-    compareEarthDifference.textContent = 'Δ vs A: ' + formatDifference(earthAzimuthDifference) + ' az · ' +
-      formatDifference(comparison.earth.elevation - earth.elevation) + ' el';
-    accessibleReadings += '; Site B Sun azimuth ' + comparison.sun.azimuth.toFixed(1) +
+    compareSunDifference.textContent = sameTime
+      ? 'Δ vs A: ' + formatDifference(sunAzimuthDifference) + ' az · ' +
+        formatDifference(comparison.sun.elevation - sun.elevation) + ' el'
+      : 'Δ unavailable · selected times differ';
+    compareEarthDifference.textContent = sameTime
+      ? 'Δ vs A: ' + formatDifference(earthAzimuthDifference) + ' az · ' +
+        formatDifference(comparison.earth.elevation - earth.elevation) + ' el'
+      : 'Δ unavailable · selected times differ';
+    accessibleReadings += '; Site B at ' + comparisonTimeLabel + ', Sun azimuth ' + comparison.sun.azimuth.toFixed(1) +
       ' degrees, elevation ' + comparison.sun.elevation.toFixed(1) + ' degrees; Earth azimuth ' +
       comparison.earth.azimuth.toFixed(1) + ' degrees, elevation ' + comparison.earth.elevation.toFixed(1) + ' degrees';
-    chartDescription += ' Site B Sun azimuth ' + comparison.sun.azimuth.toFixed(1) +
-      ' degrees and elevation ' + comparison.sun.elevation.toFixed(1) + ' degrees; Earth azimuth ' +
-      comparison.earth.azimuth.toFixed(1) + ' degrees and elevation ' + comparison.earth.elevation.toFixed(1) + ' degrees.';
   }
-  slider.setAttribute('aria-valuetext', accessibleReadings);
-  canvas.setAttribute('aria-label', chartDescription);
-  drawChart();
+  if (isSeparateWindowComparison()) {
+    sitePlayback.a.slider.setAttribute('aria-valuetext', timeLabel);
+    sitePlayback.b.slider.setAttribute('aria-valuetext', rowTimeLabel(comparisonResult.rows[currentIndices.b]));
+  } else {
+    slider.setAttribute('aria-valuetext', accessibleReadings);
+  }
+  for (const [siteKey, siteResult] of [['a', result], ['b', comparisonResult]]) {
+    if (!siteResult) continue;
+    const siteLabel = siteKey === 'a' ? 'Site A' : 'Site B';
+    const siteRows = siteResult.rows[currentIndices[siteKey]];
+    const siteTimeLabel = rowTimeLabel(siteRows);
+    const chartZoomState = chartZoom[siteKey];
+    let chartDescription = 'At ' + siteTimeLabel + ', ' + siteLabel + ' Sun azimuth ' +
+      siteRows.sun.azimuth.toFixed(1) + ' degrees and elevation ' + siteRows.sun.elevation.toFixed(1) +
+      ' degrees; Earth azimuth ' + siteRows.earth.azimuth.toFixed(1) + ' degrees and elevation ' +
+      siteRows.earth.elevation.toFixed(1) + ' degrees.';
+    if (chartZoomState) {
+      chartDescription += ' Zoomed to ' + chartZoomState.target + ' near ' +
+        chartZoomState.center.toFixed(1) + ' degrees azimuth.';
+    }
+    chartCanvases[siteKey].setAttribute('aria-label', chartDescription);
+    drawChart(siteKey);
+  }
 }
 
 function combineResults(sun, earth) {
@@ -1746,30 +1893,58 @@ function stopPlayback() {
   playbackTimer = undefined;
   playback.textContent = 'Play';
   playback.setAttribute('aria-pressed', 'false');
+  stopSitePlayback('a');
+  stopSitePlayback('b');
 }
 
 function startPlayback() {
   if (playbackTimer) return;
-  if (currentIndex === result.rows.length - 1) slider.value = '0';
+  if (Number(slider.value) === result.rows.length - 1) slider.value = '0';
   playback.textContent = 'Pause';
   playback.setAttribute('aria-pressed', 'true');
   updateCurrentReading();
   playbackTimer = window.setInterval(() => {
-    if (currentIndex >= result.rows.length - 1) {
+    if (Number(slider.value) >= result.rows.length - 1) {
       stopPlayback();
       return;
     }
-    slider.value = String(currentIndex + 1);
+    slider.value = String(Number(slider.value) + 1);
     updateCurrentReading();
   }, 250);
 }
 
-function renderResult(payload, params, comparison, comparisonParamsInput) {
+function stopSitePlayback(siteKey) {
+  window.clearInterval(sitePlaybackTimers[siteKey]);
+  sitePlaybackTimers[siteKey] = undefined;
+  sitePlayback[siteKey].button.textContent = 'Play';
+  sitePlayback[siteKey].button.setAttribute('aria-pressed', 'false');
+}
+
+function startSitePlayback(siteKey) {
+  const control = sitePlayback[siteKey];
+  const siteResult = siteKey === 'a' ? result : comparisonResult;
+  if (sitePlaybackTimers[siteKey] || !siteResult?.rows.length) return;
+  if (Number(control.slider.value) === siteResult.rows.length - 1) control.slider.value = '0';
+  control.button.textContent = 'Pause';
+  control.button.setAttribute('aria-pressed', 'true');
+  updateCurrentReading();
+  sitePlaybackTimers[siteKey] = window.setInterval(() => {
+    if (Number(control.slider.value) >= siteResult.rows.length - 1) {
+      stopSitePlayback(siteKey);
+      return;
+    }
+    control.slider.value = String(Number(control.slider.value) + 1);
+    updateCurrentReading();
+  }, 250);
+}
+
+function renderResult(payload, params, comparison, comparisonParamsInput, separateWindowMode = false) {
   stopPlayback();
   result = payload;
   comparisonResult = comparison;
   resultParams = params;
   comparisonParams = comparisonParamsInput;
+  comparisonUsesSeparateWindows = Boolean(comparisonResult && separateWindowMode);
   tableDetails.hidden = true;
   tableToggle.setAttribute('aria-expanded', 'false');
   tableToggle.firstElementChild.textContent = 'View additional topographical information';
@@ -1777,26 +1952,41 @@ function renderResult(payload, params, comparison, comparisonParamsInput) {
   assessmentSiteB.disabled = !comparisonResult;
   setAssessmentSite('a');
   page = 0;
-  currentIndex = 0;
+  currentIndices.a = 0;
+  currentIndices.b = 0;
   slider.max = String(result.rows.length - 1);
   slider.value = '0';
+  sitePlayback.a.slider.max = String(result.rows.length - 1);
+  sitePlayback.a.slider.value = '0';
+  if (comparisonResult) {
+    sitePlayback.b.slider.max = String(comparisonResult.rows.length - 1);
+    sitePlayback.b.slider.value = '0';
+  }
   const site = params.get('latitude') + '°, ' + params.get('longitude') + '° E';
   const comparisonSite = comparisonParamsInput
     ? comparisonParamsInput.get('latitude') + '°, ' + comparisonParamsInput.get('longitude') + '° E'
     : '';
-  summary.textContent = 'Sun + Earth · Site A ' + site +
-    (comparisonResult ? ' · Site B ' + comparisonSite : '') + ' · ' + result.rows.length + ' samples';
+  siteAChartTitle.textContent = 'Site A · ' + site;
+  siteBChartTitle.textContent = 'Site B · ' + comparisonSite;
+  summary.textContent = 'Sun + Earth · Site A ' + site + ' · ' +
+    params.get('start') + '–' + params.get('stop') + ' UTC · ' + result.rows.length + ' samples' +
+    (comparisonResult ? ' · Site B ' + comparisonSite + ' · ' +
+      comparisonParamsInput.get('start') + '–' + comparisonParamsInput.get('stop') + ' UTC · ' +
+      comparisonResult.rows.length + ' samples' : '');
   empty.hidden = true;
   data.hidden = false;
+  siteBChartPanel.hidden = !comparisonResult;
+  sharedPlayback.hidden = comparisonUsesSeparateWindows;
+  sitePlayback.a.container.hidden = !comparisonUsesSeparateWindows;
+  sitePlayback.b.container.hidden = !comparisonUsesSeparateWindows || !comparisonResult;
   comparisonReadings.hidden = !comparisonResult;
   comparisonVisibility.hidden = !comparisonResult;
-  siteBKey.hidden = !comparisonResult;
-  if (comparisonResult) {
-    comparisonSiteLabel.textContent = 'Site B · ' + comparisonSite;
-  }
   for (const header of comparisonTableHeaders) header.hidden = !comparisonResult;
-  status.textContent = 'Loaded Sun and Earth ephemerides for ' + result.rows.length +
-    ' matching time samples' + (comparisonResult ? ' at both sites.' : '.');
+  status.textContent = comparisonResult
+    ? comparisonUsesSeparateWindows
+      ? 'Loaded ' + result.rows.length + ' Site A samples and ' + comparisonResult.rows.length + ' Site B samples. Playback is independent for each site.'
+      : 'Loaded ' + result.rows.length + ' matching time samples at both sites.'
+    : 'Loaded Sun and Earth ephemerides for ' + result.rows.length + ' time samples.';
   terrainStatus.textContent = result.terrainPending
     ? 'Terrain horizon: loading Moon Trek elevation data…'
     : result.terrain?.horizons
@@ -1808,10 +1998,17 @@ function renderResult(payload, params, comparison, comparisonParamsInput) {
   updateAssessment(params);
   openAssessmentModal();
   renderTable();
-  const siteVisibility = updateVisibility(params);
+  const siteVisibility = updateVisibility(params, comparisonParamsInput);
   renderSiteRecommendation(siteVisibility);
   updateCurrentReading();
-  if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) startPlayback();
+  if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    if (comparisonUsesSeparateWindows) {
+      startSitePlayback('a');
+      startSitePlayback('b');
+    } else {
+      startPlayback();
+    }
+  }
 }
 
 async function fetchTarget(params, target) {
@@ -1850,17 +2047,27 @@ function assertMatchingSamples(first, second) {
 form.addEventListener('submit', async event => {
   event.preventDefault();
   stopPlayback();
-  const params = new URLSearchParams(new FormData(form));
-  const comparisonParams = compareEnabled.checked ? new URLSearchParams(params) : undefined;
-  for (const key of ['compareEnabled', 'compareLatitude', 'compareLongitude']) {
+  const formParams = new URLSearchParams(new FormData(form));
+  const params = new URLSearchParams(formParams);
+  const comparisonParams = compareEnabled.checked ? new URLSearchParams(formParams) : undefined;
+  const separateWindowMode = Boolean(comparisonParams && separateWindows.checked);
+  for (const key of ['compareLatitude', 'compareLongitude', 'compareStart', 'compareStop']) {
     params.delete(key);
-    comparisonParams?.delete(key);
   }
   if (comparisonParams) {
+    for (const key of ['compareLatitude', 'compareLongitude', 'compareStart', 'compareStop']) {
+      comparisonParams.delete(key);
+    }
     comparisonParams.set('latitude', compareLatitudeInput.value);
     comparisonParams.set('longitude', compareLongitudeInput.value);
+    if (separateWindowMode) {
+      comparisonParams.set('start', compareStartInput.value);
+      comparisonParams.set('stop', compareStopInput.value);
+    }
   }
   comparisonResult = undefined;
+  chartZoom.a = undefined;
+  chartZoom.b = undefined;
   run.disabled = true;
   run.firstElementChild.textContent = comparisonParams ? 'Comparing sites…' : 'Running observation…';
   status.classList.remove('error');
@@ -1889,9 +2096,9 @@ form.addEventListener('submit', async event => {
     let comparison;
     if (comparisonParams) {
       comparison = await fetchSiteResults(comparisonParams, 'Site B');
-      assertMatchingSamples(combined, comparison);
+      if (!separateWindowMode) assertMatchingSamples(combined, comparison);
     }
-    renderResult(combined, params, comparison, comparisonParams);
+    renderResult(combined, params, comparison, comparisonParams, separateWindowMode);
   } catch (error) {
     status.textContent = error instanceof SyntaxError ? 'The service returned an unexpected response.' : error.message;
     status.classList.add('error');
@@ -1906,14 +2113,67 @@ function updateComparisonFields() {
   compareCoordinates.hidden = !enabled;
   compareLatitudeInput.disabled = !enabled;
   compareLongitudeInput.disabled = !enabled;
+  compareMapPickButton.disabled = !enabled;
+  siteBMapCard.hidden = !enabled;
+  separateWindowControl.hidden = !enabled;
+  separateWindows.disabled = !enabled;
+  if (!enabled) {
+    separateWindows.checked = false;
+    setComparisonMapPicking(false);
+  }
+  updateTimeWindowFields();
+  updateMapMarkers();
+}
+
+function updateTimeWindowFields() {
+  const separate = compareEnabled.checked && separateWindows.checked;
+  if (separate) {
+    if (!compareStartInput.value) compareStartInput.value = startInput.value;
+    if (!compareStopInput.value) compareStopInput.value = stopInput.value;
+  }
+  siteBTimeWindow.hidden = !separate;
+  compareStartInput.disabled = !separate;
+  compareStopInput.disabled = !separate;
+  sharedWindowNote.hidden = !compareEnabled.checked || separate;
+}
+
+function setComparisonMapPicking(active, message) {
+  if (active && !globePanel.hidden) showSiteView(false);
+  isPickingComparisonSite = active;
+  compareMapPickButton.setAttribute('aria-pressed', String(active));
+  compareMapPickButton.textContent = active ? 'Cancel map selection' : 'Choose Site B on map';
+  if (message !== undefined) {
+    compareMapStatus.textContent = message;
+    compareMapStatus.hidden = !message;
+  } else if (active) {
+    compareMapStatus.textContent = 'Click the lunar map to set Site B. Site A will remain unchanged.';
+    compareMapStatus.hidden = false;
+  } else {
+    compareMapStatus.textContent = '';
+    compareMapStatus.hidden = true;
+  }
 }
 compareEnabled.addEventListener('change', updateComparisonFields);
+separateWindows.addEventListener('change', updateTimeWindowFields);
+compareMapPickButton.addEventListener('click', () => {
+  setComparisonMapPicking(!isPickingComparisonSite);
+});
 updateComparisonFields();
 
 playback.addEventListener('click', () => {
   if (playbackTimer) stopPlayback();
   else startPlayback();
 });
+for (const siteKey of ['a', 'b']) {
+  sitePlayback[siteKey].button.addEventListener('click', () => {
+    if (sitePlaybackTimers[siteKey]) stopSitePlayback(siteKey);
+    else startSitePlayback(siteKey);
+  });
+  sitePlayback[siteKey].slider.addEventListener('input', () => {
+    stopSitePlayback(siteKey);
+    updateCurrentReading();
+  });
+}
 previous.addEventListener('click', () => { page -= 1; renderTable(); });
 next.addEventListener('click', () => { page += 1; renderTable(); });
 tableToggle.addEventListener('click', () => {
@@ -1930,26 +2190,22 @@ slider.addEventListener('input', () => {
   updateCurrentReading();
 });
 download.addEventListener('click', () => {
-  const rows = result.rows.map(({ time, sun, earth }, index) => {
-    const sunTerrain = result.terrain ? terrainAtAzimuth(result.terrain.horizons, sun.azimuth) : undefined;
-    const earthTerrain = result.terrain ? terrainAtAzimuth(result.terrain.horizons, earth.azimuth) : undefined;
-    const values = [time, sun.azimuth, sun.elevation,
-      sunTerrain?.horizonElevation ?? '', sunTerrain ? sun.elevation >= 0 && sun.elevation <= sunTerrain.horizonElevation : '',
-      earth.azimuth, earth.elevation,
-      earthTerrain?.horizonElevation ?? '', earthTerrain ? earth.elevation >= 0 && earth.elevation <= earthTerrain.horizonElevation : ''];
-    if (comparisonResult) {
-      const { sun: compareSun, earth: compareEarth } = comparisonResult.rows[index];
-      const compareSunTerrain = comparisonResult.terrain
-        ? terrainAtAzimuth(comparisonResult.terrain.horizons, compareSun.azimuth) : undefined;
-      const compareEarthTerrain = comparisonResult.terrain
-        ? terrainAtAzimuth(comparisonResult.terrain.horizons, compareEarth.azimuth) : undefined;
-      values.push(compareSun.azimuth, compareSun.elevation,
-        compareSunTerrain?.horizonElevation ?? '',
-        compareSunTerrain ? compareSun.elevation >= 0 && compareSun.elevation <= compareSunTerrain.horizonElevation : '',
-        compareEarth.azimuth, compareEarth.elevation,
-        compareEarthTerrain?.horizonElevation ?? '',
-        compareEarthTerrain ? compareEarth.elevation >= 0 && compareEarth.elevation <= compareEarthTerrain.horizonElevation : '');
-    }
+  const csvSiteValues = (siteResult, sample) => {
+    if (!sample) return ['', '', '', '', '', '', '', ''];
+    const sunTerrain = siteResult.terrain
+      ? terrainAtAzimuth(siteResult.terrain.horizons, sample.sun.azimuth) : undefined;
+    const earthTerrain = siteResult.terrain
+      ? terrainAtAzimuth(siteResult.terrain.horizons, sample.earth.azimuth) : undefined;
+    return [sample.sun.azimuth, sample.sun.elevation,
+      sunTerrain?.horizonElevation ?? '',
+      sunTerrain ? sample.sun.elevation >= 0 && sample.sun.elevation <= sunTerrain.horizonElevation : '',
+      sample.earth.azimuth, sample.earth.elevation,
+      earthTerrain?.horizonElevation ?? '',
+      earthTerrain ? sample.earth.elevation >= 0 && sample.earth.elevation <= earthTerrain.horizonElevation : ''];
+  };
+  const rows = alignedResultRows().map(({ time, siteA, siteB }) => {
+    const values = [time, ...csvSiteValues(result, siteA)];
+    if (comparisonResult) values.push(...csvSiteValues(comparisonResult, siteB));
     return values.join(',');
   });
   const headers = [comparisonResult
@@ -1969,4 +2225,9 @@ download.addEventListener('click', () => {
   link.remove();
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 });
-new ResizeObserver(drawChart).observe(canvas);
+const chartResizeObserver = new ResizeObserver(() => {
+  drawChart('a');
+  drawChart('b');
+});
+chartResizeObserver.observe(chartCanvases.a);
+chartResizeObserver.observe(chartCanvases.b);
