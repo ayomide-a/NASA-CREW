@@ -11,6 +11,14 @@
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@9.2.4/ol.css">
   <script src="https://cdn.jsdelivr.net/npm/ol@9.2.4/dist/ol.js"></script>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
+      }
+    }
+  </script>
   <script src="/app.js" type="module"></script>
 </head>
 <body>
@@ -31,12 +39,18 @@
 
     <section class="panel map-panel" aria-labelledby="map-heading">
       <div class="map-heading">
-        <div>
-          <h2 id="map-heading">Choose a lunar landing site</h2>
-          <p>Click the Moon to set coordinates, or select sites below to highlight them.</p>
+        <div class="map-toolbar">
+          <div>
+            <h2 id="map-heading">Choose a lunar landing site</h2>
+            <p id="map-instructions">Click the Moon to set coordinates, or select sites below to highlight them.</p>
+          </div>
+          <div class="map-mode" role="group" aria-label="Site selector view">
+            <button type="button" id="map-mode" aria-pressed="true" aria-controls="map-2d">2D map</button>
+            <button type="button" id="globe-mode" aria-pressed="false" aria-controls="site-globe">3D globe</button>
+          </div>
         </div>
         <div class="map-actions">
-          <div class="poi-control">
+          <div class="poi-control" data-map-only>
             <details id="poi-picker" class="poi-picker">
               <summary><span>Points of interest</span><span id="poi-count">0 selected</span></summary>
               <div id="poi-options" class="poi-options" role="group" aria-label="Select points of interest">
@@ -55,17 +69,35 @@
             <p id="region-status" class="poi-status" role="status" aria-live="polite" hidden></p>
           </div>
           <div class="map-tools">
-            <label for="map-view">Map view</label>
-            <select id="map-view">
-              <option value="global">Global</option>
-              <option value="north-pole">North pole</option>
-              <option value="south-pole">South pole</option>
-            </select>
+            <div class="map-projection" data-map-only>
+              <label for="map-view">Map view</label>
+              <select id="map-view">
+                <option value="global">Global</option>
+                <option value="north-pole">North pole</option>
+                <option value="south-pole">South pole</option>
+              </select>
+            </div>
             <output id="map-coordinates" aria-live="polite">Lat −89.000° · Lon 0.000° E</output>
           </div>
         </div>
       </div>
-      <div class="map-canvas">
+      <div id="site-globe" class="site-globe" hidden>
+        <div class="globe-stage">
+          <div id="globe-canvas" aria-hidden="true"></div>
+          <div id="globe-pins" role="group" aria-label="Visible landing site markers"></div>
+          <div class="globe-controls">
+            <span>Drag to rotate · Scroll or pinch to zoom</span>
+            <button type="button" id="globe-reset" disabled>Reset view</button>
+          </div>
+          <p id="globe-status" role="status">Loading 3D globe…</p>
+        </div>
+        <div class="globe-sites">
+          <h3>Preset landing sites</h3>
+          <div id="globe-site-list" role="group" aria-label="Preset landing sites"><p>Loading sites…</p></div>
+        </div>
+        <p class="map-attribution globe-attribution">Spherical basemap · <a href="https://svs.gsfc.nasa.gov/4720/" target="_blank" rel="noopener">NASA Scientific Visualization Studio</a></p>
+      </div>
+      <div id="map-2d" class="map-canvas">
         <div id="map" role="application" aria-label="Interactive lunar surface map. Click to set coordinates or select a highlighted point; click a highlighted region to display its name and available description; drag to pan and use the controls to zoom."></div>
         <div id="region-popup" class="region-popup" role="status" aria-live="polite" hidden>
           <span id="region-popup-name"></span>
@@ -96,7 +128,7 @@
           </div>
         </div>
       </div>
-      <p class="map-attribution">LRO WAC imagery · high-zoom LOLA shaded relief · <a href="https://trek.nasa.gov/moon/" target="_blank" rel="noopener">NASA Moon Trek</a></p>
+      <p class="map-attribution" data-map-only>LRO WAC imagery · high-zoom LOLA shaded relief · <a href="https://trek.nasa.gov/moon/" target="_blank" rel="noopener">NASA Moon Trek</a></p>
       <button id="assessment-launch" class="assessment-launch" type="button" disabled>Landing-Site Assessment</button>
     </section>
 
