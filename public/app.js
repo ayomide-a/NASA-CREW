@@ -32,6 +32,14 @@ const assessment = {
 const mapElement = document.querySelector('#map');
 const mapCoordinates = document.querySelector('#map-coordinates');
 const mapViewSelect = document.querySelector('#map-view');
+const map2d = document.querySelector('#map-2d');
+const mapInstructions = document.querySelector('#map-instructions');
+const globeMode = document.querySelector('#globe-mode');
+const mapMode = document.querySelector('#map-mode');
+const globePanel = document.querySelector('#site-globe');
+const globeList = document.querySelector('#globe-site-list');
+const globeStatus = document.querySelector('#globe-status');
+const globeReset = document.querySelector('#globe-reset');
 const poiCount = document.querySelector('#poi-count');
 const poiPicker = document.querySelector('#poi-picker');
 const poiOptions = document.querySelector('#poi-options');
@@ -46,6 +54,10 @@ let page = 0;
 let currentIndex = 0;
 let playbackTimer;
 let pointsOfInterest = [];
+let globeSites = [];
+let globe;
+const globePresets = ['IM-2', 'IM-1', 'Chandrayaan-3', 'Apollo 11', 'Apollo 17', "Chang'e 4"];
+const globeSiteButtons = new Map();
 const selectedPoiIndexes = new Set();
 let chartZoom;
 
@@ -273,6 +285,9 @@ function updateSelectedSite(latitude, longitude) {
   latitudeInput.value = latitude.toFixed(6);
   longitudeInput.value = longitudeEast.toFixed(6);
   mapCoordinates.textContent = 'Lat ' + latitude.toFixed(3) + '° · Lon ' + longitudeEast.toFixed(3) + '° E';
+  const preset = globeSites.find(site => site.latitude.toFixed(6) === latitudeInput.value &&
+    eastLongitude(site.longitude).toFixed(6) === longitudeInput.value);
+  highlightGlobeSite(preset);
   markerSource.clear();
   const mapView = mapViewSelect.value;
   const coordinate = coordinateForSite(latitude, longitudeEast, mapView);
@@ -290,10 +305,75 @@ function updateMarkerFromInputs() {
       !Number.isFinite(latitude) || latitude < -90 || latitude > 90 ||
       !Number.isFinite(longitude) || longitude < -180 || longitude > 360) {
     markerSource.clear();
+    highlightGlobeSite();
     mapCoordinates.textContent = 'Enter valid coordinates to place the marker.';
     return;
   }
   updateSelectedSite(latitude, longitude);
+}
+
+function highlightGlobeSite(site) {
+  for (const [preset, button] of globeSiteButtons) {
+    button.setAttribute('aria-pressed', String(site === preset));
+  }
+  globe?.select(site);
+}
+
+function chooseGlobeSite(site) {
+  updateSelectedSite(site.latitude, site.longitude);
+  globe?.focus(site);
+}
+
+function renderGlobeSites() {
+  globeSites = globePresets.map(name => pointsOfInterest.find(site => site.mission === name)).filter(Boolean);
+  globeSiteButtons.clear();
+  for (const site of globeSites) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    const title = document.createElement('strong');
+    title.textContent = site.mission;
+    const coords = document.createElement('small');
+    coords.textContent = Math.abs(site.latitude).toFixed(3) + '° ' + (site.latitude < 0 ? 'S' : 'N') +
+      ' · ' + Math.abs(site.longitude).toFixed(3) + '° ' + (site.longitude < 0 ? 'W' : 'E');
+    button.append(title, coords);
+    button.addEventListener('click', () => chooseGlobeSite(site));
+    globeSiteButtons.set(site, button);
+  }
+  if (!globeSites.length) {
+    globeList.textContent = 'No preset sites found.';
+    return;
+  }
+  globeList.replaceChildren(...globeSiteButtons.values());
+  globe?.setSites(globeSites);
+  updateMarkerFromInputs();
+}
+
+async function initializeGlobe() {
+  try {
+    const { createMoonGlobe } = await import('./moon-globe.js');
+    globe = await createMoonGlobe({
+      viewport: document.querySelector('#globe-canvas'),
+      pinLayer: document.querySelector('#globe-pins'),
+      onSelect: chooseGlobeSite
+    });
+    globe.setSites(globeSites);
+    updateMarkerFromInputs();
+    globeStatus.hidden = true;
+    globeReset.disabled = false;
+  } catch (error) {
+    globeStatus.textContent = 'The 3D globe couldn’t load. Choose a preset from the list or use the 2D map.';
+    console.warn('Could not initialize the 3D Moon:', error);
+  }
+}
+
+function showSiteView(isGlobe) {
+  globeMode.setAttribute('aria-pressed', String(isGlobe));
+  mapMode.setAttribute('aria-pressed', String(!isGlobe));
+  globePanel.hidden = !isGlobe;
+  map2d.hidden = isGlobe;
+  mapInstructions.textContent = isGlobe ? 'Choose a preset site on the globe or from the list.' :
+    'Click the Moon to set coordinates, or select sites below to highlight them.';
+  if (!isGlobe) lunarMap.updateSize();
 }
 
 function updatePoiHighlights() {
@@ -391,6 +471,7 @@ async function loadPointsOfInterest() {
     if (!response.ok) throw new Error('HTTP ' + response.status);
     pointsOfInterest = validatePointsOfInterest(await response.json());
     renderPoiOptions();
+    renderGlobeSites();
     poiStatus.classList.remove('error');
     poiStatus.hidden = true;
     poiStatus.textContent = '';
@@ -398,6 +479,7 @@ async function loadPointsOfInterest() {
     const unavailable = document.createElement('p');
     unavailable.textContent = 'Site list unavailable. See the status below.';
     poiOptions.replaceChildren(unavailable);
+    globeList.textContent = 'The preset site list is unavailable. Enter coordinates in Observation setup.';
     poiStatus.classList.add('error');
     poiStatus.hidden = false;
     poiStatus.textContent = 'Could not load points of interest: ' + error.message;
@@ -439,7 +521,11 @@ lunarMap.on('singleclick', event => {
 });
 latitudeInput.addEventListener('change', updateMarkerFromInputs);
 longitudeInput.addEventListener('change', updateMarkerFromInputs);
+globeMode.addEventListener('click', () => showSiteView(true));
+mapMode.addEventListener('click', () => showSiteView(false));
+globeReset.addEventListener('click', () => globe?.focus());
 updateMarkerFromInputs();
+initializeGlobe();
 
 function renderTable() {
   const start = page * pageSize;
