@@ -24,7 +24,7 @@
       <div class="hero-art" aria-hidden="true"><div class="orbit"></div></div>
       <div class="hero-copy">
         <div class="kicker"><span></span> NASA SPACE APPS CHALLENGE</div>
-        <h1>Lunar Ephemeris<br>Explorer<span>.</span></h1>
+        <h1>Lunar Ephemeris Explorer<span>.</span></h1>
         <p>Track the Sun and Earth from any site on the Moon using NASA JPL Horizons.</p>
       </div>
     </section>
@@ -33,28 +33,30 @@
       <div class="map-heading">
         <div>
           <h2 id="map-heading">Choose a lunar landing site</h2>
-          <p>Click or tap the Moon to set your observation coordinates.</p>
+          <p>Click the Moon to set coordinates, or select sites below to highlight them.</p>
         </div>
-        <div class="map-tools">
-          <label for="map-view">Map view</label>
-          <select id="map-view">
-            <option value="global">Global</option>
-            <option value="north-pole">North pole</option>
-            <option value="south-pole">South pole</option>
-          </select>
-          <output id="map-coordinates" aria-live="polite">Lat −89.000° · Lon 0.000° E</output>
+        <div class="map-actions">
+          <div class="poi-control">
+            <details id="poi-picker" class="poi-picker">
+              <summary><span>Points of interest</span><span id="poi-count">0 selected</span></summary>
+              <div id="poi-options" class="poi-options" role="group" aria-label="Select points of interest">
+                <p>Loading points of interest...</p>
+              </div>
+            </details>
+            <p id="poi-status" class="poi-status" role="status" aria-live="polite" hidden></p>
+          </div>
+          <div class="map-tools">
+            <label for="map-view">Map view</label>
+            <select id="map-view">
+              <option value="global">Global</option>
+              <option value="north-pole">North pole</option>
+              <option value="south-pole">South pole</option>
+            </select>
+            <output id="map-coordinates" aria-live="polite">Lat −89.000° · Lon 0.000° E</output>
+          </div>
         </div>
       </div>
-      <div id="map" role="application" aria-label="Interactive lunar surface map. Click to select a landing site; drag to pan and use the controls to zoom."></div>
-      <div class="lola-panel" aria-live="polite">
-        <div>
-          <h3>Lunar Topography</h3>
-          <p id="lola-status">Select or edit coordinates to load local DEM information.</p>
-          <p id="quant-stats" class="dataset-stats">DEM quantitative metrics pending.</p>
-          <p id="dem-details" class="dataset-stats">Aspect, roughness, curvature, and hazard indicators will appear here.</p>
-        </div>
-        <img id="lola-preview" alt="Local lunar DEM preview tile around the selected site" hidden>
-      </div>
+      <div id="map" role="application" aria-label="Interactive lunar surface map. Click to set coordinates or select a highlighted point; drag to pan and use the controls to zoom."></div>
       <p class="map-attribution">LRO WAC imagery · high-zoom LOLA shaded relief · <a href="https://trek.nasa.gov/moon/" target="_blank" rel="noopener">NASA Moon Trek</a></p>
     </section>
 
@@ -97,16 +99,33 @@
           <p>Run an observation to see both objects’ azimuth and elevation over time.</p>
         </div>
         <div id="data" hidden>
+          <section class="site-assessment" aria-labelledby="assessment-heading">
+            <div class="assessment-heading">
+              <div><p class="eyebrow">Landing-site assessment</p><h3 id="assessment-heading">Can this site see what it needs?</h3></div>
+              <div id="site-rating" class="site-rating">Waiting for data</div>
+            </div>
+            <p id="site-verdict" class="site-verdict"></p>
+            <div class="assessment-grid">
+              <article class="assessment-card solar-card">
+                <div class="assessment-card-head"><span class="sun-color">Sun</span><strong id="sun-assessment-visible">—</strong></div>
+                <dl><div><dt>Above terrain horizon</dt><dd id="sun-assessment-time">—</dd></div><div><dt>Maximum elevation</dt><dd id="sun-assessment-max">—</dd></div><div><dt>Terrain obstruction</dt><dd id="sun-assessment-obstruction">—</dd></div></dl>
+              </article>
+              <article class="assessment-card earth-card">
+                <div class="assessment-card-head"><span class="earth-color">Earth</span><strong id="earth-assessment-visible">—</strong></div>
+                <dl><div><dt>Above terrain horizon</dt><dd id="earth-assessment-time">—</dd></div><div><dt>Maximum elevation</dt><dd id="earth-assessment-max">—</dd></div><div><dt>Terrain obstruction</dt><dd id="earth-assessment-obstruction">—</dd></div></dl>
+              </article>
+            </div>
+          </section>
           <div class="chart-head">
             <h3>Sky positions</h3>
-            <div class="sky-legend" aria-label="Plot legend">
+            <div class="sky-legend" aria-label="Chart targets">
               <span class="sun-color">Sun</span>
               <span class="earth-color">Earth</span>
             </div>
           </div>
           <p class="chart-instruction">Click the Sun or Earth marker to zoom into its azimuth; click again to reset. The dashed gray line shows the terrain horizon.</p>
           <div class="sky-view">
-            <canvas id="chart" role="img" aria-label="Sun and Earth azimuth and elevation in the lunar sky."></canvas>
+            <canvas id="chart" role="img" aria-label="Sun azimuth and elevation against the lunar terrain horizon."></canvas>
             <aside class="visibility" aria-label="Time above the terrain horizon">
               <h3>Above terrain horizon</h3>
               <div class="visibility-items">
@@ -127,10 +146,7 @@
             <button type="button" id="playback" aria-pressed="false">Play</button>
             <input id="time-slider" type="range" min="0" max="0" value="0" step="1" aria-label="Observation time">
             <output id="current-reading" for="time-slider" aria-live="polite"></output>
-            <div class="playback-readings">
-              <span class="sun-color">Sun <output id="sun-reading"></output></span>
-              <span class="earth-color">Earth <output id="earth-reading"></output></span>
-            </div>
+            <div class="playback-reading"><span id="selected-target-label" class="sun-color">Sun</span><output id="selected-reading"></output></div>
           </div>
           <p class="note">Azimuth is measured clockwise from north. Elevation is relative to the local horizon; terrain can block the line of sight.</p>
           <p id="terrain-status" class="note">Terrain profile: not requested.</p>
@@ -138,7 +154,6 @@
             <table><thead><tr><th scope="col">Timestamp (UTC)</th><th scope="col">Sun azimuth (°)</th><th scope="col">Sun elevation (°)</th><th scope="col">Sun terrain</th><th scope="col">Earth azimuth (°)</th><th scope="col">Earth elevation (°)</th><th scope="col">Earth terrain</th></tr></thead><tbody></tbody></table>
           </div>
           <div class="paging"><button type="button" id="previous">← Previous</button><span id="range" aria-live="polite"></span><button type="button" id="next">Next →</button></div>
-          <details><summary>Raw Horizons response</summary><pre id="raw" tabindex="0"></pre></details>
         </div>
       </section>
     </div>
