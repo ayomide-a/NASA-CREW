@@ -1,0 +1,305 @@
+{
+  "type": "FeatureCollection",
+  "metadata": {
+    "coordinateOrder": "longitude, latitude in lunar degrees",
+    "editing": "Edit polygon coordinates directly."
+  },
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "mare-tranquillitatis",
+        "name": "Mare Tranquillitatis (Sea of Tranquility)",
+        "group": "Lunar maria",
+        "description": "The Apollo 11 landing site is within Mare Tranquillitatis. NASA's Lunar Reconnaissance Orbiter later imaged the descent stage and astronaut foot trails, preserving a record of the first crewed Moon landing.",
+        "descriptionSource": "https://science.nasa.gov/resource/apollo-11-landing-site/"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[17, 13], [22, 16], [29, 19], [38, 16], [45, 10], [44, 6], [41, -1], [37, -3], [31, -4.1], [26, -4], [23, -2], [20, 1], [18, 6], [19, 8], [17, 13]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "mare-serenitatis",
+        "name": "Mare Serenitatis (Sea of Serenity)",
+        "group": "Lunar maria",
+        "description": "NASA studies lunar plains and cooled-lava features to understand the Moon's past volcanism and how rocky worlds formed and changed.",
+        "descriptionSource": "https://science.nasa.gov/moon/lunar-volcanism/"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[6.8, 30], [8.5, 37], [15, 37.7], [22, 36.5], [29.9, 28], [29, 20], [22, 16], [18, 16], [10, 20], [8, 23], [6.8, 30]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "mare-imbrium",
+        "name": "Mare Imbrium (Sea of Rains)",
+        "group": "Lunar maria",
+        "description": "NASA studies lunar plains and cooled-lava features to understand the Moon's past volcanism and how rocky worlds formed and changed.",
+        "descriptionSource": "https://science.nasa.gov/moon/lunar-volcanism/"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[-40, 35], [-39, 20], [-31, 14], [-22, 15], [-7, 17], [5, 28], [8, 36], [-1, 47], [-10, 49], [-26, 46], [-36, 43], [-40, 35]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "mare-crisium",
+        "name": "Mare Crisium (Sea of Crises)",
+        "group": "Lunar maria",
+        "description": "NASA describes Mare Crisium as a basaltic plain filling an ancient impact basin. Its 2.5-3.3-billion-year-old basalts and wrinkle ridges help scientists investigate ancient volcanism and surface compression.",
+        "descriptionSource": "https://science.nasa.gov/resource/wrinkle-ridge-in-mare-crisium/"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[50, 21], [51, 17], [50, 14], [54, 10], [60, 9], [66, 13], [69, 18], [64, 22], [58, 24], [53, 23], [50, 21]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "oceanus-procellarum",
+        "name": "Oceanus Procellarum (Ocean of Storms)",
+        "group": "Lunar maria",
+        "description": "NASA studies lunar plains and cooled-lava features to understand the Moon's past volcanism and how rocky worlds formed and changed.",
+        "descriptionSource": "https://science.nasa.gov/moon/lunar-volcanism/"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[-81, 57], [-75, 55], [-69, 52], [-64, 48], [-60, 45], [-54, 43], [-48, 41], [-43, 39], [-41, 36], [-41, 28], [-41, 20], [-40, 12], [-39, 4], [-36, -2], [-33, -7], [-30, -11], [-27, -13], [-29, -16.2], [-30.5, -15.2], [-34, -15], [-46, -13], [-54, -11], [-63, -9], [-70, -5], [-75, 3], [-79, 15], [-81, 28], [-81, 42], [-81, 57]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "mare-fecunditatis",
+        "name": "Mare Fecunditatis (Sea of Fertility)",
+        "group": "Lunar maria",
+        "description": "NASA studies lunar plains and cooled-lava features to understand the Moon's past volcanism and how rocky worlds formed and changed.",
+        "descriptionSource": "https://science.nasa.gov/moon/lunar-volcanism/"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[47, 6], [53, 5], [58, 2], [62, -3], [63.5, -8], [62, -13], [58, -17], [53, -21.4], [48, -20], [43, -15], [40.6, -9], [40.6, -5], [42, -1], [47, 6]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "mare-nubium",
+        "name": "Mare Nubium (Sea of Clouds)",
+        "group": "Lunar maria",
+        "description": "NASA studies lunar plains and cooled-lava features to understand the Moon's past volcanism and how rocky worlds formed and changed.",
+        "descriptionSource": "https://science.nasa.gov/moon/lunar-volcanism/"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[-28, -23], [-22, -15], [-12, -5], [-5, -12], [-6, -20], [-15, -30], [-23, -29], [-28, -23]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "mare-humorum",
+        "name": "Mare Humorum (Sea of Moisture)",
+        "group": "Lunar maria",
+        "description": "NASA studies lunar plains and cooled-lava features to understand the Moon's past volcanism and how rocky worlds formed and changed.",
+        "descriptionSource": "https://science.nasa.gov/moon/lunar-volcanism/"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[-46, -18], [-43, -25], [-38, -31], [-32, -27], [-30, -20], [-34, -15], [-41, -16], [-46, -18]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "mare-nectaris",
+        "name": "Mare Nectaris (Sea of Nectar)",
+        "group": "Lunar maria",
+        "description": "NASA studies lunar plains and cooled-lava features to understand the Moon's past volcanism and how rocky worlds formed and changed.",
+        "descriptionSource": "https://science.nasa.gov/moon/lunar-volcanism/"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[28, -8], [31, -11], [34, -20], [40, -20], [39, -12], [35, -9], [31, -7], [28, -8]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "mare-frigoris",
+        "name": "Mare Frigoris (Sea of Cold)",
+        "group": "Lunar maria",
+        "description": "NASA studies lunar plains and cooled-lava features to understand the Moon's past volcanism and how rocky worlds formed and changed.",
+        "descriptionSource": "https://science.nasa.gov/moon/lunar-volcanism/"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[-58, 53], [-49, 47], [-40, 48], [-30, 55], [-16, 54], [-8, 57], [2, 54], [10, 48], [35, 51], [30, 58], [11, 59], [0, 62], [-15, 65], [-35, 61], [-58, 53]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "faustini-rim-a",
+        "name": "Faustini Rim A",
+        "group": "Artemis III candidate regions"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[79.74664, -88.19025], [82.34873, -87.53595], [97.67653, -87.5358], [100.50053, -88.39159], [79.74664, -88.19025]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "peak-near-shackleton",
+        "name": "Peak Near Shackleton",
+        "group": "Artemis III candidate regions"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[142.19086, -88.82943], [118.89938, -89.117851], [107.45657, -88.69164], [126.20331, -88.44869], [142.19086, -88.82943]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "connecting-ridge",
+        "name": "Connecting Ridge",
+        "group": "Artemis III candidate regions"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[-101.89179, -89.3582], [-143.17117, -89.83356], [-171.29402, -89.33549], [-151.228783, -89.09113], [-101.89179, -89.3582]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "connecting-ridge-extension",
+        "name": "Connecting Ridge Extension",
+        "group": "Artemis III candidate regions"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[-84.26272, -88.71716], [-78.55413, -89.36796], [-130.39606, -89.18537], [-112.55171, -88.617], [-84.26272, -88.71716]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "de-gerlache-rim-1",
+        "name": "de Gerlache Rim 1",
+        "group": "Artemis III candidate regions"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[-62.91826, -88.33212], [-51.63509, -88.77766], [-76.4384, -89.01572], [-81.15505, -88.49693], [-62.91826, -88.33212]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "de-gerlache-rim-2",
+        "name": "de Gerlache Rim 2",
+        "group": "Artemis III candidate regions"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[-60.56618, -87.7832], [-49.35774, -88.32623], [-71.32644, -88.66002], [-77.43653, -88.02268], [-60.56618, -87.7832]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "de-gerlache-kocher-massif",
+        "name": "de Gerlache-Kocher Massif",
+        "group": "Artemis III candidate regions"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[-110.4784, -85.65789], [-114.02647, -86.26733], [-122.57071, -85.95258], [-118.15397, -85.38411], [-110.4784, -85.65789]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "haworth",
+        "name": "Haworth",
+        "group": "Artemis III candidate regions"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[-26.73578, -86.11101], [-12.34862, -86.44016], [-16.88962, -87.39576], [-35.02779, -86.95418], [-26.73578, -86.11101]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "malapert-massif",
+        "name": "Malapert Massif",
+        "group": "Artemis III candidate regions"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[-4.79038, -85.63231], [4.33251, -85.63491], [5.15101, -86.32436], [-5.72857, -86.32544], [-4.79038, -85.63231]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "leibnitz-beta-plateau",
+        "name": "Leibnitz Beta Plateau",
+        "group": "Artemis III candidate regions"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[27.2796, -85.32765], [32.74668, -85.06305], [36.39573, -85.49674], [30.56093, -85.78767], [27.2796, -85.32765]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "nobile-rim-1",
+        "name": "Nobile Rim 1",
+        "group": "Artemis III candidate regions"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[35.65466, -85.35246], [38.05707, -84.97612], [43.21241, -85.47541], [36.47282, -85.89947], [35.65466, -85.35246]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "nobile-rim-2",
+        "name": "Nobile Rim 2",
+        "group": "Artemis III candidate regions"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[54.46963, -84.04707], [57.8366, -83.5025], [63.02593, -83.82683], [59.96757, -84.40559], [54.46963, -84.04707]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "id": "amundsen-rim",
+        "name": "Amundsen Rim",
+        "group": "Artemis III candidate regions"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[65.10349, -84.40564], [67.66466, -83.80421], [73.51644, -84.02237], [71.50609, -84.64997], [65.10349, -84.40564]]]
+      }
+    }
+  ]
+}

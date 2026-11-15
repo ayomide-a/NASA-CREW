@@ -48,6 +48,18 @@ const poiCount = document.querySelector('#poi-count');
 const poiPicker = document.querySelector('#poi-picker');
 const poiOptions = document.querySelector('#poi-options');
 const poiStatus = document.querySelector('#poi-status');
+const regionCount = document.querySelector('#region-count');
+const regionPicker = document.querySelector('#region-picker');
+const regionOptions = document.querySelector('#region-options');
+const regionStatus = document.querySelector('#region-status');
+const regionPopupElement = document.querySelector('#region-popup');
+const regionPopupName = document.querySelector('#region-popup-name');
+const closeRegionPopup = document.querySelector('#close-region-popup');
+const regionAboutPanel = document.querySelector('#region-about-panel');
+const regionAboutTitle = document.querySelector('#region-about-title');
+const regionAboutDescription = document.querySelector('#region-about-description');
+const regionAboutSource = document.querySelector('#region-about-source');
+const closeRegionAbout = document.querySelector('#close-region-about');
 const latitudeInput = form.elements.namedItem('latitude');
 const longitudeInput = form.elements.namedItem('longitude');
 const startInput = form.elements.namedItem('start');
@@ -74,6 +86,10 @@ let currentIndex = 0;
 let playbackTimer;
 let pointsOfInterest = [];
 const selectedPoiIndexes = new Set();
+let regions = [];
+const selectedRegionIndexes = new Set();
+let activeRegionIndex;
+let activeAboutRegionIndex;
 let chartZoom;
 let lolaRequest;
 
@@ -100,6 +116,15 @@ ol.proj.addProjection(southPolarProjection);
 
 const markerSource = new ol.source.Vector();
 const poiSource = new ol.source.Vector();
+const regionSource = new ol.source.Vector();
+
+function regionColor(index, opacity) {
+  const hue = ((index * 137.508) % 360).toFixed(1);
+  return opacity === undefined ?
+    'hsl(' + hue + ' 76% 57%)' :
+    'hsla(' + hue + ', 76%, 57%, ' + opacity + ')';
+}
+
 function createImageryLayer(url, projection, spatialReference) {
   const source = new ol.source.ImageArcGISRest({
     url,
@@ -177,6 +202,13 @@ const lunarMap = new ol.Map({
     polarDetailLayers['north-pole'],
     polarDetailLayers['south-pole'],
     new ol.layer.Vector({
+      source: regionSource,
+      style: feature => new ol.style.Style({
+        fill: new ol.style.Fill({ color: regionColor(feature.get('regionIndex'), 0.26) }),
+        stroke: new ol.style.Stroke({ color: regionColor(feature.get('regionIndex')), width: 2 })
+      })
+    }),
+    new ol.layer.Vector({
       source: poiSource,
       style: feature => [
         new ol.style.Style({
@@ -223,6 +255,57 @@ const lunarMap = new ol.Map({
   ],
   view: createMapView('global')
 });
+
+const regionPopupOverlay = new ol.Overlay({
+  element: regionPopupElement,
+  positioning: 'bottom-center',
+  offset: [0, -12],
+  stopEvent: true
+});
+lunarMap.addOverlay(regionPopupOverlay);
+
+function hideRegionPopup() {
+  activeRegionIndex = undefined;
+  regionPopupElement.hidden = true;
+  regionPopupOverlay.setPosition(undefined);
+}
+
+function showRegionPopup(index, coordinate) {
+  const region = regions[index];
+  if (!region) return;
+  activeRegionIndex = index;
+  regionPopupName.textContent = region.name;
+  regionPopupElement.hidden = false;
+  regionPopupOverlay.setPosition(coordinate);
+}
+
+closeRegionPopup.addEventListener('click', hideRegionPopup);
+
+function hideRegionAbout() {
+  activeAboutRegionIndex = undefined;
+  regionAboutPanel.hidden = true;
+}
+
+function showRegionAbout(index) {
+  const region = regions[index];
+  if (!region || !region.description) {
+    hideRegionAbout();
+    return;
+  }
+  activeAboutRegionIndex = index;
+  regionAboutTitle.textContent = region.name;
+  regionAboutDescription.textContent = region.description;
+  if (region.descriptionSource) {
+    regionAboutSource.href = region.descriptionSource;
+    regionAboutSource.hidden = false;
+  } else {
+    regionAboutSource.removeAttribute('href');
+    regionAboutSource.hidden = true;
+  }
+  regionAboutPanel.hidden = false;
+}
+
+closeRegionAbout.addEventListener('click', hideRegionAbout);
 
 const lunarRadius = 1737400;
 
@@ -407,42 +490,451 @@ function updatePoiHighlights() {
   poiSource.addFeatures(features);
 }
 
-function renderPoiOptions() {
-  const options = pointsOfInterest.map((site, index) => {
-    const label = document.createElement('label');
-    label.className = 'poi-option';
-    const checkbox = document.createElement('input');
-    checkbox.type = 'checkbox';
-    checkbox.value = String(index);
-    checkbox.addEventListener('change', () => {
-      if (checkbox.checked) {
-        selectedPoiIndexes.add(index);
-        selectPoiSite(site);
-      } else {
-        selectedPoiIndexes.delete(index);
-      }
-      poiCount.textContent = selectedPoiIndexes.size + ' selected';
-      updatePoiHighlights();
-    });
+function poiProgram(mission) {
+  const programs = [
+    [/^Apollo\b/i, 'Apollo'],
+    [/^(?:IM-\d+|Intuitive Machines)\b/i, 'Intuitive Machines'],
+    [/^Blue Ghost\b/i, 'Blue Ghost'],
+    [/^Chandrayaan\b/i, 'Chandrayaan'],
+    [/^Chang['’]e\b/i, "Chang'e"],
+    [/^Luna\b/i, 'Luna'],
+    [/^Surveyor\b/i, 'Surveyor'],
+    [/^SLIM\b/i, 'SLIM']
+  ];
+  return programs.find(([pattern]) => pattern.test(mission))?.[1] || 'Other missions';
+}
 
-    const copy = document.createElement('span');
-    copy.className = 'poi-option-copy';
-    const mission = document.createElement('strong');
-    mission.textContent = site.mission;
-    const coordinates = document.createElement('small');
-    coordinates.textContent = site.latitude.toFixed(3) + '°, ' +
-      eastLongitude(site.longitude).toFixed(3) + '° E · ' + site.date + ' ' + site.time;
-    copy.append(mission, coordinates);
-    label.append(checkbox, copy);
-    return label;
-  });
-  if (!options.length) {
+function updatePoiSelection() {
+  poiCount.textContent = selectedPoiIndexes.size + ' selected';
+  updatePoiHighlights();
+}
+
+function renderPoiOptions() {
+  if (!pointsOfInterest.length) {
     const emptyMessage = document.createElement('p');
     emptyMessage.textContent = 'No sites configured. Add entries to public/data/points-of-interest.json.';
     poiOptions.replaceChildren(emptyMessage);
     return;
   }
+
+  const groups = new Map();
+  pointsOfInterest.forEach((site, index) => {
+    const program = poiProgram(site.mission);
+    if (!groups.has(program)) groups.set(program, []);
+    groups.get(program).push({ site, index });
+  });
+
+  const options = [...groups].map(([program, entries]) => {
+    const group = document.createElement('section');
+    group.className = 'poi-program';
+
+    const heading = document.createElement('div');
+    heading.className = 'poi-program-heading';
+
+    const groupLabel = document.createElement('label');
+    groupLabel.className = 'poi-program-toggle';
+    const groupCheckbox = document.createElement('input');
+    groupCheckbox.type = 'checkbox';
+    groupCheckbox.setAttribute('aria-label', 'Select all ' + program + ' missions');
+
+    const groupName = document.createElement('span');
+    groupName.textContent = program;
+    groupLabel.append(groupCheckbox, groupName);
+
+    const expander = document.createElement('button');
+    expander.type = 'button';
+    expander.className = 'poi-program-expander';
+    expander.setAttribute('aria-expanded', 'false');
+    expander.setAttribute('aria-label', 'Expand ' + program + ' missions');
+    expander.textContent = entries.length + (entries.length === 1 ? ' mission' : ' missions');
+    const items = document.createElement('div');
+    items.className = 'poi-program-items';
+    items.setAttribute('role', 'group');
+    items.setAttribute('aria-label', program + ' missions');
+    items.hidden = true;
+    const itemCheckboxes = [];
+
+    expander.addEventListener('click', () => {
+      items.hidden = !items.hidden;
+      expander.setAttribute('aria-expanded', String(!items.hidden));
+      expander.setAttribute('aria-label', (items.hidden ? 'Expand ' : 'Collapse ') + program + ' missions');
+    });
+
+    function syncGroupCheckbox() {
+      const selectedCount = entries.filter(({ index }) => selectedPoiIndexes.has(index)).length;
+      groupCheckbox.checked = selectedCount === entries.length;
+      groupCheckbox.indeterminate = selectedCount > 0 && selectedCount < entries.length;
+    }
+
+    for (const { site, index } of entries) {
+      const label = document.createElement('label');
+      label.className = 'poi-option';
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.value = String(index);
+      checkbox.checked = selectedPoiIndexes.has(index);
+      checkbox.addEventListener('change', () => {
+        if (checkbox.checked) {
+          selectedPoiIndexes.add(index);
+          selectPoiSite(site);
+        } else {
+          selectedPoiIndexes.delete(index);
+        }
+        syncGroupCheckbox();
+        updatePoiSelection();
+      });
+
+      const copy = document.createElement('span');
+      copy.className = 'poi-option-copy';
+      const mission = document.createElement('strong');
+      mission.textContent = site.mission;
+      const coordinates = document.createElement('small');
+      coordinates.textContent = site.latitude.toFixed(3) + '°, ' +
+        eastLongitude(site.longitude).toFixed(3) + '° E · ' + site.date + ' ' + site.time;
+      copy.append(mission, coordinates);
+      label.append(checkbox, copy);
+      items.append(label);
+      itemCheckboxes.push(checkbox);
+    }
+
+    groupCheckbox.addEventListener('change', () => {
+      for (const checkbox of itemCheckboxes) {
+        const index = Number(checkbox.value);
+        checkbox.checked = groupCheckbox.checked;
+        if (groupCheckbox.checked) selectedPoiIndexes.add(index);
+        else selectedPoiIndexes.delete(index);
+      }
+      if (groupCheckbox.checked) selectPoiSite(entries[0].site);
+      updatePoiSelection();
+    });
+
+    syncGroupCheckbox();
+    heading.append(groupLabel, expander);
+    group.append(heading, items);
+    return group;
+  });
   poiOptions.replaceChildren(...options);
+}
+
+function angularDistanceBetween(start, end) {
+  const radians = point => {
+    const longitude = point[0] * Math.PI / 180;
+    const latitude = point[1] * Math.PI / 180;
+    return [
+      Math.cos(latitude) * Math.cos(longitude),
+      Math.cos(latitude) * Math.sin(longitude),
+      Math.sin(latitude)
+    ];
+  };
+  const first = radians(start);
+  const second = radians(end);
+  const dot = Math.max(-1, Math.min(1,
+    first[0] * second[0] + first[1] * second[1] + first[2] * second[2]));
+  return Math.acos(dot);
+}
+
+function greatCirclePoint(start, end, fraction) {
+  const radians = point => {
+    const longitude = point[0] * Math.PI / 180;
+    const latitude = point[1] * Math.PI / 180;
+    return [
+      Math.cos(latitude) * Math.cos(longitude),
+      Math.cos(latitude) * Math.sin(longitude),
+      Math.sin(latitude)
+    ];
+  };
+  const first = radians(start);
+  const second = radians(end);
+  const angle = angularDistanceBetween(start, end);
+  if (angle < 1e-8) return [start[0], start[1]];
+
+  const scale = Math.sin(angle);
+  const firstScale = Math.sin((1 - fraction) * angle) / scale;
+  const secondScale = Math.sin(fraction * angle) / scale;
+  const x = first[0] * firstScale + second[0] * secondScale;
+  const y = first[1] * firstScale + second[1] * secondScale;
+  const z = first[2] * firstScale + second[2] * secondScale;
+  return [
+    Math.atan2(y, x) * 180 / Math.PI,
+    Math.atan2(z, Math.hypot(x, y)) * 180 / Math.PI
+  ];
+}
+
+function densifyGeographicRing(ring) {
+  const coordinates = [];
+  for (let index = 0; index < ring.length - 1; index++) {
+    const start = ring[index];
+    const end = ring[index + 1];
+    const segments = Math.max(1, Math.ceil(
+      angularDistanceBetween(start, end) * lunarRadius / 10000
+    ));
+    for (let segment = 0; segment < segments; segment++) {
+      coordinates.push(greatCirclePoint(start, end, segment / segments));
+    }
+  }
+  coordinates.push(ring[ring.length - 1]);
+  return coordinates;
+}
+
+function projectGeographicRing(ring, mapView) {
+  const coordinates = densifyGeographicRing(ring);
+  if (mapView !== 'global') {
+    return coordinates.map(([longitude, latitude]) =>
+      coordinateForSite(latitude, longitude, mapView)
+    );
+  }
+
+  let previousLongitude;
+  return coordinates.map(([longitude, latitude], index) => {
+    if (index > 0) {
+      while (longitude - previousLongitude > 180) longitude -= 360;
+      while (longitude - previousLongitude < -180) longitude += 360;
+    }
+    previousLongitude = longitude;
+    return [longitude, latitude];
+  });
+}
+
+function updateRegionHighlights() {
+  if (activeRegionIndex !== undefined && !selectedRegionIndexes.has(activeRegionIndex)) {
+    hideRegionPopup();
+  }
+  const mapView = mapViewSelect.value;
+  const features = [...selectedRegionIndexes].flatMap(index => {
+    const region = regions[index];
+    const projectedRings = region.coordinates.map(ring => projectGeographicRing(ring, mapView));
+    let minLongitude = Infinity;
+    let maxLongitude = -Infinity;
+    projectedRings.forEach(ring => ring.forEach(([longitude]) => {
+      minLongitude = Math.min(minLongitude, longitude);
+      maxLongitude = Math.max(maxLongitude, longitude);
+    }));
+    const offsets = mapView === 'global' ?
+      [0, ...(minLongitude < -180 ? [360] : []),
+        ...(maxLongitude > 180 ? [-360] : [])] : [0];
+    return offsets.map(offset => {
+      const rings = offset === 0 ? projectedRings :
+        projectedRings.map(ring => ring.map(([x, y]) => [x + offset, y]));
+      const feature = new ol.Feature(new ol.geom.Polygon(rings));
+      feature.set('regionIndex', index);
+      return feature;
+    });
+  });
+  regionSource.clear();
+  regionSource.addFeatures(features);
+}
+
+function updateRegionSelection() {
+  regionCount.textContent = selectedRegionIndexes.size + ' selected';
+  if (activeAboutRegionIndex !== undefined &&
+      !selectedRegionIndexes.has(activeAboutRegionIndex)) {
+    hideRegionAbout();
+  }
+  updateRegionHighlights();
+}
+
+function validateRegions(payload) {
+  if (!payload || payload.type !== 'FeatureCollection' || !Array.isArray(payload.features)) {
+    throw new Error('The JSON file must contain a GeoJSON FeatureCollection.');
+  }
+  const ids = new Set();
+  return payload.features.map((feature, index) => {
+    const properties = feature && feature.properties;
+    const id = properties && properties.id;
+    const entry = 'Region ' + (index + 1);
+    if (!properties || typeof properties !== 'object') {
+      throw new Error(entry + ' needs properties.');
+    }
+    if (typeof id !== 'string' || !id.trim() || ids.has(id)) {
+      throw new Error(entry + ' needs a unique string id.');
+    }
+    if (typeof properties.name !== 'string' || !properties.name.trim() ||
+        typeof properties.group !== 'string' || !properties.group.trim()) {
+      throw new Error(entry + ' needs a name and group.');
+    }
+    if (!feature.geometry || feature.geometry.type !== 'Polygon' ||
+        !Array.isArray(feature.geometry.coordinates) || !feature.geometry.coordinates.length) {
+      throw new Error(entry + ' needs a polygon geometry.');
+    }
+
+    const coordinates = feature.geometry.coordinates.map((ring, ringIndex) => {
+      if (!Array.isArray(ring) || ring.length < 4) {
+        throw new Error(entry + ' polygon ring ' + (ringIndex + 1) + ' needs at least four points.');
+      }
+      return ring.map((point, pointIndex) => {
+        if (!Array.isArray(point) || point.length < 2 ||
+            typeof point[0] !== 'number' || !Number.isFinite(point[0]) ||
+            point[0] < -180 || point[0] > 180 ||
+            typeof point[1] !== 'number' || !Number.isFinite(point[1]) ||
+            point[1] < -90 || point[1] > 90) {
+          throw new Error(entry + ' point ' + (pointIndex + 1) +
+            ' needs longitude and latitude within the lunar coordinate range.');
+        }
+        return [point[0], point[1]];
+      });
+    });
+    if (coordinates.some(ring =>
+      ring[0][0] !== ring[ring.length - 1][0] ||
+      ring[0][1] !== ring[ring.length - 1][1]
+    )) {
+      throw new Error(entry + ' polygon rings must be closed.');
+    }
+
+    const description = typeof properties.description === 'string' ? properties.description.trim() : '';
+    const descriptionSource = typeof properties.descriptionSource === 'string' ?
+      properties.descriptionSource.trim() : '';
+    if (descriptionSource) {
+      let sourceUrl;
+      try {
+        sourceUrl = new URL(descriptionSource);
+      } catch {
+        throw new Error(entry + ' description source must be a valid HTTPS URL.');
+      }
+      if (sourceUrl.protocol !== 'https:') {
+        throw new Error(entry + ' description source must be a valid HTTPS URL.');
+      }
+    }
+
+    ids.add(id);
+    return {
+      id,
+      name: properties.name.trim(),
+      group: properties.group.trim(),
+      description,
+      descriptionSource,
+      coordinates
+    };
+  });
+}
+
+function renderRegionOptions() {
+  if (!regions.length) {
+    const emptyMessage = document.createElement('p');
+    emptyMessage.textContent = 'No regions configured. Add entries to public/data/regions-of-interest.json.';
+    regionOptions.replaceChildren(emptyMessage);
+    return;
+  }
+
+  const groups = new Map();
+  regions.forEach((region, index) => {
+    if (!groups.has(region.group)) groups.set(region.group, []);
+    groups.get(region.group).push({ region, index });
+  });
+
+  const options = [...groups].map(([groupName, entries]) => {
+    const group = document.createElement('section');
+    group.className = 'region-group';
+
+    const heading = document.createElement('div');
+    heading.className = 'poi-program-heading';
+    const groupLabel = document.createElement('label');
+    groupLabel.className = 'poi-program-toggle';
+    const groupCheckbox = document.createElement('input');
+    groupCheckbox.type = 'checkbox';
+    groupCheckbox.setAttribute('aria-label', 'Select all ' + groupName);
+    const title = document.createElement('span');
+    title.textContent = groupName;
+    groupLabel.append(groupCheckbox, title);
+
+    const expander = document.createElement('button');
+    expander.type = 'button';
+    expander.className = 'poi-program-expander';
+    expander.setAttribute('aria-expanded', 'false');
+    expander.setAttribute('aria-label', 'Expand ' + groupName);
+    expander.textContent = entries.length + (entries.length === 1 ? ' region' : ' regions');
+
+    const items = document.createElement('div');
+    items.className = 'poi-program-items';
+    items.setAttribute('role', 'group');
+    items.setAttribute('aria-label', groupName);
+    items.hidden = true;
+    const itemCheckboxes = [];
+
+    function syncGroupCheckbox() {
+      const selectedCount = entries.filter(({ index }) => selectedRegionIndexes.has(index)).length;
+      groupCheckbox.checked = selectedCount === entries.length;
+      groupCheckbox.indeterminate = selectedCount > 0 && selectedCount < entries.length;
+    }
+
+    expander.addEventListener('click', () => {
+      items.hidden = !items.hidden;
+      expander.setAttribute('aria-expanded', String(!items.hidden));
+      expander.setAttribute('aria-label',
+        (items.hidden ? 'Expand ' : 'Collapse ') + groupName);
+    });
+
+    for (const { region, index } of entries) {
+      const option = document.createElement('div');
+      option.className = 'region-option';
+      const label = document.createElement('label');
+      label.className = 'poi-option';
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.value = String(index);
+      checkbox.checked = selectedRegionIndexes.has(index);
+      checkbox.addEventListener('change', () => {
+        if (checkbox.checked) {
+          selectedRegionIndexes.add(index);
+          showRegionAbout(index);
+        } else {
+          selectedRegionIndexes.delete(index);
+        }
+        syncGroupCheckbox();
+        updateRegionSelection();
+      });
+
+      const swatch = document.createElement('span');
+      swatch.className = 'region-swatch';
+      swatch.style.backgroundColor = regionColor(index);
+      const copy = document.createElement('span');
+      copy.className = 'poi-option-copy';
+      const name = document.createElement('strong');
+      name.textContent = region.name;
+      copy.append(name);
+      label.append(checkbox, swatch, copy);
+      option.append(label);
+      items.append(option);
+      itemCheckboxes.push(checkbox);
+    }
+
+    groupCheckbox.addEventListener('change', () => {
+      for (const checkbox of itemCheckboxes) {
+        const index = Number(checkbox.value);
+        checkbox.checked = groupCheckbox.checked;
+        if (groupCheckbox.checked) selectedRegionIndexes.add(index);
+        else selectedRegionIndexes.delete(index);
+      }
+      if (groupCheckbox.checked && entries.length === 1) {
+        showRegionAbout(entries[0].index);
+      }
+      updateRegionSelection();
+    });
+
+    syncGroupCheckbox();
+    heading.append(groupLabel, expander);
+    group.append(heading, items);
+    return group;
+  });
+  regionOptions.replaceChildren(...options);
+}
+
+async function loadRegions() {
+  try {
+    const response = await fetch('/data/regions-of-interest.json');
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    regions = validateRegions(await response.json());
+    renderRegionOptions();
+    regionStatus.classList.remove('error');
+    regionStatus.hidden = true;
+    regionStatus.textContent = '';
+  } catch (error) {
+    const unavailable = document.createElement('p');
+    unavailable.textContent = 'Region list unavailable. See the status below.';
+    regionOptions.replaceChildren(unavailable);
+    regionStatus.classList.add('error');
+    regionStatus.hidden = false;
+    regionStatus.textContent = 'Could not load lunar regions: ' + error.message;
+  }
 }
 
 function validatePointsOfInterest(payload) {
@@ -502,9 +994,11 @@ async function loadPointsOfInterest() {
 
 document.addEventListener('click', event => {
   if (poiPicker.open && !poiPicker.contains(event.target)) poiPicker.open = false;
+  if (regionPicker.open && !regionPicker.contains(event.target)) regionPicker.open = false;
 });
 
 mapViewSelect.addEventListener('change', () => {
+  hideRegionPopup();
   for (const [name, layer] of Object.entries(imageryLayers)) {
     layer.setVisible(name === mapViewSelect.value);
   }
@@ -514,23 +1008,36 @@ mapViewSelect.addEventListener('change', () => {
   lunarMap.setView(createMapView(mapViewSelect.value));
   updateMarkerFromInputs();
   updatePoiHighlights();
+  updateRegionHighlights();
 });
 lunarMap.on('singleclick', event => {
   let clickedPoi;
+  let clickedRegion;
   lunarMap.forEachFeatureAtPixel(event.pixel, feature => {
     if (Number.isInteger(feature.get('poiIndex'))) {
       clickedPoi = feature;
       return true;
     }
+    if (!clickedRegion && Number.isInteger(feature.get('regionIndex'))) {
+      clickedRegion = feature;
+    }
     return undefined;
   }, { hitTolerance: 8 });
   if (clickedPoi) {
+    hideRegionPopup();
     const site = pointsOfInterest[clickedPoi.get('poiIndex')];
     selectPoiSite(site);
     return;
   }
   const [longitude, latitude] = mapViewSelect.value === 'global' ?
     event.coordinate : polarToGeographic(event.coordinate, mapViewSelect.value === 'north-pole' ? 'north' : 'south');
+  if (clickedRegion) {
+    const regionIndex = clickedRegion.get('regionIndex');
+    showRegionPopup(regionIndex, event.coordinate);
+    showRegionAbout(regionIndex);
+  } else {
+    hideRegionPopup();
+  }
   updateSelectedSite(latitude, longitude);
 });
 latitudeInput.addEventListener('change', updateMarkerFromInputs);
@@ -590,6 +1097,7 @@ function terrainAtAzimuth(horizons, azimuth) {
   });
 }
 loadPointsOfInterest();
+loadRegions();
 
 function drawChart() {
   const width = canvas.clientWidth;
