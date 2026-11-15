@@ -630,13 +630,22 @@ function drawChart() {
     context.lineWidth = 3;
     context.setLineDash(isComparison ? [2, 5] : [8, 5]);
     let started = false;
-    horizons.forEach(point => {
-      const pointAzimuth = relativeAzimuth(point.azimuth);
-      if (chartZoom && (pointAzimuth < viewCenter - viewSpan / 2 || pointAzimuth > viewCenter + viewSpan / 2)) return;
+    let previousAzimuth;
+    horizons.map(point => ({ point, azimuth: relativeAzimuth(point.azimuth) }))
+      .filter(({ azimuth }) => !chartZoom ||
+        (azimuth >= viewCenter - viewSpan / 2 && azimuth <= viewCenter + viewSpan / 2))
+      .sort((first, second) => first.azimuth - second.azimuth)
+      .forEach(({ point, azimuth }) => {
+      if (previousAzimuth !== undefined && azimuth - previousAzimuth > 15) {
+        context.stroke();
+        context.beginPath();
+        started = false;
+      }
       const pointX = x(point.azimuth);
       const pointY = y(point.horizonElevation);
       if (!started) { context.moveTo(pointX, pointY); started = true; }
       else context.lineTo(pointX, pointY);
+      previousAzimuth = azimuth;
     });
     context.stroke();
     context.setLineDash([]);
@@ -662,11 +671,13 @@ function drawChart() {
     context.moveTo(plot.left, position);
     context.lineTo(plot.right, position);
     context.stroke();
-    context.fillText(elevation + '°', plot.left - 8, position);
+    context.fillText((chartZoom ? elevation.toFixed(1) : elevation) + '°', plot.left - 8, position);
   }
   context.setLineDash([]);
 
-  const azimuthLabels = ['0° N', '90° E', '180° S', '270° W', '360° N'];
+  const azimuthLabels = chartZoom
+    ? [-30, -15, 0, 15, 30].map(offset => Math.round((viewCenter + offset + 360) % 360) + '°')
+    : ['0° N', '90° E', '180° S', '270° W', '360° N'];
   context.textAlign = 'center';
   for (let index = 0; index < azimuthLabels.length; index += 1) {
     const position = plot.left + index / (azimuthLabels.length - 1) * (plot.right - plot.left);
@@ -680,7 +691,9 @@ function drawChart() {
   context.fillStyle = muted;
   context.fillText('Azimuth (clockwise from north)', (plot.left + plot.right) / 2, height - 17);
   context.save();
-  context.translate(22, (plot.top + plot.bottom) / 2);
+  context.textAlign = 'center';
+  context.textBaseline = 'middle';
+  context.translate(12, (plot.top + plot.bottom) / 2);
   context.rotate(-Math.PI / 2);
   context.fillText('Elevation', 0, 0);
   context.restore();
