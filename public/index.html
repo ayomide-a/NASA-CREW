@@ -78,6 +78,15 @@
             </details>
             <p id="poi-status" class="poi-status" role="status" aria-live="polite" hidden></p>
           </div>
+          <div class="region-control">
+            <details id="region-picker" class="poi-picker">
+              <summary><span>Lunar regions</span><span id="region-count">0 selected</span></summary>
+              <div id="region-options" class="poi-options" role="group" aria-label="Select lunar regions">
+                <p>Loading lunar regions...</p>
+              </div>
+            </details>
+            <p id="region-status" class="poi-status" role="status" aria-live="polite" hidden></p>
+          </div>
           <div class="map-tools">
             <label for="map-view">Map view</label>
             <select id="map-view">
@@ -87,9 +96,41 @@
             </select>
           </div>
         </div>
-        <div id="map" role="application" aria-label="Interactive lunar surface map. Click to set coordinates or select a highlighted point; drag to pan and use the controls to zoom."></div>
+        <div class="map-canvas">
+          <div id="map" role="application" aria-label="Interactive lunar surface map. Click to set coordinates or select a highlighted point; click a highlighted region to display its name and available description; drag to pan and use the controls to zoom."></div>
+          <div id="region-popup" class="region-popup" role="status" aria-live="polite" hidden>
+            <span id="region-popup-name"></span>
+            <button id="close-region-popup" type="button">Close</button>
+          </div>
+          <aside id="region-about-panel" class="region-about-panel" aria-labelledby="region-about-title" aria-describedby="region-about-description" aria-live="polite" hidden>
+            <div class="region-about-heading">
+              <h2 id="region-about-title"></h2>
+              <button id="close-region-about" type="button" aria-label="Close site description">Close</button>
+            </div>
+            <p id="region-about-description"></p>
+            <a id="region-about-source" target="_blank" rel="noopener noreferrer" hidden>NASA source</a>
+          </aside>
+        </div>
         <p class="map-attribution">LRO WAC imagery · high-zoom LOLA shaded relief · <a href="https://trek.nasa.gov/moon/" target="_blank" rel="noopener">NASA Moon Trek</a></p>
       </div>
+      <div class="lola-panel" aria-live="polite">
+        <div>
+          <h3>Lunar Topography</h3>
+          <p id="lola-status">Select or edit coordinates to load local LOLA DEM information.</p>
+          <p id="quant-stats" class="dataset-stats">DEM quantitative metrics pending.</p>
+          <p id="dem-details" class="dataset-stats">Aspect, roughness, curvature, and hazard indicators will appear here.</p>
+        </div>
+        <div class="lola-tile-view">
+          <img id="lola-preview" alt="Local lunar DEM preview tile around the selected site" hidden>
+          <img id="lola-spot-preview" alt="LOLA spot observations around the selected lunar site" hidden>
+          <div class="lola-tile-nav" aria-label="Topography tile view navigation">
+            <button id="lola-prev-view" type="button" aria-label="Show previous topography tile view">&#8592;</button>
+            <span id="lola-view-label">DEM tile</span>
+            <button id="lola-next-view" type="button" aria-label="Show next topography tile view">&#8594;</button>
+          </div>
+        </div>
+      </div>
+      <button id="assessment-launch" class="assessment-launch" type="button" disabled>Landing-Site Assessment</button>
     </section>
 
     <div class="workspace">
@@ -105,6 +146,15 @@
             <label>Altitude (km)<input type="number" name="altitude" step="any" value="0" required></label>
           </fieldset>
           <fieldset>
+            <legend>Compare sites</legend>
+            <label class="compare-toggle"><input id="compare-enabled" name="compareEnabled" type="checkbox">Compare with a second site</label>
+            <div id="compare-coordinates" class="fields" hidden>
+              <label>Site B latitude (°)<input id="compare-latitude" name="compareLatitude" type="number" min="-90" max="90" step="any" required disabled></label>
+              <label>Site B longitude (° E)<input id="compare-longitude" name="compareLongitude" type="number" min="-180" max="360" step="any" required disabled></label>
+            </div>
+            <p class="field-hint">Both sites use the same altitude and observation window.</p>
+          </fieldset>
+          <fieldset>
             <legend>Time window <span class="unit-label">UTC</span></legend>
             <div class="dates">
               <label>Start time<input type="datetime-local" name="start" value="2026-11-14T00:00" required></label>
@@ -115,8 +165,8 @@
               <label>Unit<select name="unit"><option value="min">Minutes</option><option value="h" selected>Hours</option><option value="d">Days</option></select></label>
             </div>
           </fieldset>
-          <button class="run" type="submit"><span>Run observation</span><span aria-hidden="true">→</span></button>
         </form>
+        <button id="run-observation" class="run" type="submit" form="query-form"><span>Run observation</span><span aria-hidden="true">→</span></button>
       </section>
 
       <section class="panel results" aria-labelledby="results-heading">
@@ -131,35 +181,20 @@
           <p>Run an observation to see both objects’ azimuth and elevation over time.</p>
         </div>
         <div id="data" hidden>
-          <section class="site-assessment" aria-labelledby="assessment-heading">
-            <div class="assessment-heading">
-              <div><p class="eyebrow">Landing-site assessment</p><h3 id="assessment-heading">Can this site see what it needs?</h3></div>
-              <div id="site-rating" class="site-rating">Waiting for data</div>
-            </div>
-            <p id="site-verdict" class="site-verdict"></p>
-            <div class="assessment-grid">
-              <article class="assessment-card solar-card">
-                <div class="assessment-card-head"><span class="sun-color">Sun</span><strong id="sun-assessment-visible">—</strong></div>
-                <dl><div><dt>Above terrain horizon</dt><dd id="sun-assessment-time">—</dd></div><div><dt>Maximum elevation</dt><dd id="sun-assessment-max">—</dd></div><div><dt>Terrain obstruction</dt><dd id="sun-assessment-obstruction">—</dd></div></dl>
-              </article>
-              <article class="assessment-card earth-card">
-                <div class="assessment-card-head"><span class="earth-color">Earth</span><strong id="earth-assessment-visible">—</strong></div>
-                <dl><div><dt>Above terrain horizon</dt><dd id="earth-assessment-time">—</dd></div><div><dt>Maximum elevation</dt><dd id="earth-assessment-max">—</dd></div><div><dt>Terrain obstruction</dt><dd id="earth-assessment-obstruction">—</dd></div></dl>
-              </article>
-            </div>
-          </section>
           <div class="chart-head">
             <h3>Sky positions</h3>
             <div class="sky-legend" aria-label="Chart targets">
               <span class="sun-color">Sun</span>
               <span class="earth-color">Earth</span>
+              <span class="site-key">Site A · solid</span>
+              <span id="site-b-key" class="site-key site-b-key" hidden>Site B · dashed</span>
             </div>
           </div>
-          <p class="chart-instruction">Click the Sun or Earth marker to zoom into its azimuth; click again to reset. The dashed gray line shows the terrain horizon.</p>
+          <p class="chart-instruction">Click a Sun or Earth marker to zoom into its azimuth; click again to reset. The gray line shows terrain horizons.</p>
           <div class="sky-view">
             <canvas id="chart" role="img" aria-label="Sun azimuth and elevation against the lunar terrain horizon."></canvas>
             <aside class="visibility" aria-label="Time above the terrain horizon">
-              <h3>Above terrain horizon</h3>
+              <h3>Site A · above terrain horizon</h3>
               <div class="visibility-items">
                 <div class="visibility-item">
                   <div id="sun-visibility-pie" class="visibility-pie sun-visibility" role="img" aria-label="Sun above horizon 0%"><span id="sun-visibility-value">0%</span></div>
@@ -172,6 +207,21 @@
                   <span id="earth-visibility-duration"></span>
                 </div>
               </div>
+              <div id="comparison-visibility" hidden>
+                <h3>Site B · above terrain horizon</h3>
+                <div class="visibility-items">
+                  <div class="visibility-item">
+                    <div id="compare-sun-visibility-pie" class="visibility-pie sun-visibility" role="img" aria-label="Site B Sun above horizon 0%"><span id="compare-sun-visibility-value">0%</span></div>
+                    <span class="sun-color">Sun</span>
+                    <span id="compare-sun-visibility-duration"></span>
+                  </div>
+                  <div class="visibility-item">
+                    <div id="compare-earth-visibility-pie" class="visibility-pie earth-visibility" role="img" aria-label="Site B Earth above horizon 0%"><span id="compare-earth-visibility-value">0%</span></div>
+                    <span class="earth-color">Earth</span>
+                    <span id="compare-earth-visibility-duration"></span>
+                  </div>
+                </div>
+              </div>
             </aside>
           </div>
           <div class="playback">
@@ -179,17 +229,65 @@
             <input id="time-slider" type="range" min="0" max="0" value="0" step="1" aria-label="Observation time">
             <output id="current-reading" for="time-slider" aria-live="polite"></output>
             <div class="playback-reading"><span id="selected-target-label" class="sun-color">Sun</span><output id="selected-reading"></output></div>
+            <div id="comparison-readings" class="comparison-readings" hidden>
+              <h3 id="comparison-site-label"></h3>
+              <div class="playback-readings">
+                <span class="sun-color">Sun <output id="compare-sun-reading"></output><small id="compare-sun-difference"></small></span>
+                <span class="earth-color">Earth <output id="compare-earth-reading"></output><small id="compare-earth-difference"></small></span>
+              </div>
+            </div>
           </div>
           <p class="note">Azimuth is measured clockwise from north. Elevation is relative to the local horizon; terrain can block the line of sight.</p>
           <p id="terrain-status" class="note">Terrain profile: not requested.</p>
-          <div class="table-frame">
-            <table><thead><tr><th scope="col">Timestamp (UTC)</th><th scope="col">Sun azimuth (°)</th><th scope="col">Sun elevation (°)</th><th scope="col">Sun terrain</th><th scope="col">Earth azimuth (°)</th><th scope="col">Earth elevation (°)</th><th scope="col">Earth terrain</th></tr></thead><tbody></tbody></table>
+          <section id="site-recommendation" class="site-recommendation" aria-live="polite" hidden>
+            <h3 id="recommendation-title">Landing site recommendation</h3>
+            <p id="recommendation-details"></p>
+          </section>
+          <button id="table-toggle" class="table-toggle" type="button" aria-expanded="false" aria-controls="table-details">
+            <span>View additional topographical information</span><span aria-hidden="true">+</span>
+          </button>
+          <div id="table-details" hidden>
+            <div class="table-frame">
+              <table><thead><tr><th scope="col">Timestamp (UTC)</th><th scope="col">Sun azimuth (°)</th><th scope="col">Sun elevation (°)</th><th scope="col">Sun terrain</th><th scope="col">Earth azimuth (°)</th><th scope="col">Earth elevation (°)</th><th scope="col">Earth terrain</th><th class="comparison-column" scope="col" hidden>Site B Sun azimuth (°)</th><th class="comparison-column" scope="col" hidden>Site B Sun elevation (°)</th><th class="comparison-column" scope="col" hidden>Site B Sun terrain</th><th class="comparison-column" scope="col" hidden>Site B Earth azimuth (°)</th><th class="comparison-column" scope="col" hidden>Site B Earth elevation (°)</th><th class="comparison-column" scope="col" hidden>Site B Earth terrain</th></tr></thead><tbody></tbody></table>
+            </div>
+            <div class="paging"><button type="button" id="previous">← Previous</button><span id="range" aria-live="polite"></span><button type="button" id="next">Next →</button></div>
           </div>
-          <div class="paging"><button type="button" id="previous">← Previous</button><span id="range" aria-live="polite"></span><button type="button" id="next">Next →</button></div>
         </div>
       </section>
     </div>
   </main>
+
+  <div id="assessment-modal" class="assessment-modal" hidden>
+    <div class="assessment-dialog" role="dialog" aria-modal="true" aria-labelledby="assessment-modal-title">
+      <div class="assessment-dialog-head">
+        <div><p class="eyebrow">Landing-site assessment</p><h2 id="assessment-modal-title">Site viability</h2></div>
+        <button id="assessment-close" class="assessment-close" type="button" aria-label="Close landing-site assessment">×</button>
+      </div>
+      <div id="assessment-modal-body">
+        <section class="site-assessment" aria-labelledby="assessment-heading">
+          <div class="assessment-heading">
+            <div><p class="eyebrow">Landing-site assessment</p><h3 id="assessment-heading">Can this site see what it needs?</h3></div>
+            <div class="assessment-site-toggle" role="group" aria-label="Assessment site">
+              <button id="assessment-site-a" type="button" class="is-active" aria-pressed="true">Site A</button>
+              <button id="assessment-site-b" type="button" aria-pressed="false" disabled>Site B</button>
+            </div>
+            <div id="site-rating" class="site-rating">Waiting for data</div>
+          </div>
+          <p id="site-verdict" class="site-verdict"></p>
+          <div class="assessment-grid">
+            <article class="assessment-card solar-card">
+              <div class="assessment-card-head"><span class="sun-color">Sun</span><strong id="sun-assessment-visible">—</strong></div>
+              <dl><div><dt>Above terrain horizon</dt><dd id="sun-assessment-time">—</dd></div><div><dt>Maximum elevation</dt><dd id="sun-assessment-max">—</dd></div><div><dt>Terrain obstruction</dt><dd id="sun-assessment-obstruction">—</dd></div></dl>
+            </article>
+            <article class="assessment-card earth-card">
+              <div class="assessment-card-head"><span class="earth-color">Earth</span><strong id="earth-assessment-visible">—</strong></div>
+              <dl><div><dt>Above terrain horizon</dt><dd id="earth-assessment-time">—</dd></div><div><dt>Maximum elevation</dt><dd id="earth-assessment-max">—</dd></div><div><dt>Terrain obstruction</dt><dd id="earth-assessment-obstruction">—</dd></div></dl>
+            </article>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
 
   <footer class="shell">Moonwalkers 9</footer>
 </body>

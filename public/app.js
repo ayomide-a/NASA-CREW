@@ -1,14 +1,17 @@
 const form = document.querySelector('#query-form');
-const run = form.querySelector('.run');
+const run = document.querySelector('#run-observation');
 const status = document.querySelector('#status');
 const empty = document.querySelector('#empty');
 const data = document.querySelector('#data');
 const summary = document.querySelector('#summary');
 const download = document.querySelector('.download');
 const table = document.querySelector('tbody');
+const tableToggle = document.querySelector('#table-toggle');
+const tableDetails = document.querySelector('#table-details');
 const previous = document.querySelector('#previous');
 const next = document.querySelector('#next');
 const range = document.querySelector('#range');
+const comparisonTableHeaders = document.querySelectorAll('.comparison-column');
 const canvas = document.querySelector('#chart');
 const context = canvas.getContext('2d');
 const slider = document.querySelector('#time-slider');
@@ -22,6 +25,13 @@ const sunVisibilityValue = document.querySelector('#sun-visibility-value');
 const earthVisibilityValue = document.querySelector('#earth-visibility-value');
 const sunVisibilityDuration = document.querySelector('#sun-visibility-duration');
 const earthVisibilityDuration = document.querySelector('#earth-visibility-duration');
+const comparisonVisibility = document.querySelector('#comparison-visibility');
+const compareSunVisibilityPie = document.querySelector('#compare-sun-visibility-pie');
+const compareEarthVisibilityPie = document.querySelector('#compare-earth-visibility-pie');
+const compareSunVisibilityValue = document.querySelector('#compare-sun-visibility-value');
+const compareEarthVisibilityValue = document.querySelector('#compare-earth-visibility-value');
+const compareSunVisibilityDuration = document.querySelector('#compare-sun-visibility-duration');
+const compareEarthVisibilityDuration = document.querySelector('#compare-earth-visibility-duration');
 const terrainStatus = document.querySelector('#terrain-status');
 const siteRating = document.querySelector('#site-rating');
 const siteVerdict = document.querySelector('#site-verdict');
@@ -29,6 +39,13 @@ const assessment = {
   sun: { visible: document.querySelector('#sun-assessment-visible'), time: document.querySelector('#sun-assessment-time'), max: document.querySelector('#sun-assessment-max'), obstruction: document.querySelector('#sun-assessment-obstruction') },
   earth: { visible: document.querySelector('#earth-assessment-visible'), time: document.querySelector('#earth-assessment-time'), max: document.querySelector('#earth-assessment-max'), obstruction: document.querySelector('#earth-assessment-obstruction') }
 };
+const assessmentSection = document.querySelector('.site-assessment');
+const assessmentLaunch = document.querySelector('#assessment-launch');
+const assessmentModal = document.querySelector('#assessment-modal');
+const assessmentModalBody = document.querySelector('#assessment-modal-body');
+const assessmentClose = document.querySelector('#assessment-close');
+const assessmentSiteA = document.querySelector('#assessment-site-a');
+const assessmentSiteB = document.querySelector('#assessment-site-b');
 const mapElement = document.querySelector('#map');
 const mapCoordinates = document.querySelector('#map-coordinates');
 const mapViewSelect = document.querySelector('#map-view');
@@ -40,10 +57,30 @@ const globePanel = document.querySelector('#site-globe');
 const globeList = document.querySelector('#globe-site-list');
 const globeStatus = document.querySelector('#globe-status');
 const globeReset = document.querySelector('#globe-reset');
+const lolaStatus = document.querySelector('#lola-status');
+const quantStats = document.querySelector('#quant-stats');
+const demDetails = document.querySelector('#dem-details');
+const lolaPreview = document.querySelector('#lola-preview');
+const lolaSpotPreview = document.querySelector('#lola-spot-preview');
+const lolaPrevView = document.querySelector('#lola-prev-view');
+const lolaNextView = document.querySelector('#lola-next-view');
+const lolaViewLabel = document.querySelector('#lola-view-label');
 const poiCount = document.querySelector('#poi-count');
 const poiPicker = document.querySelector('#poi-picker');
 const poiOptions = document.querySelector('#poi-options');
 const poiStatus = document.querySelector('#poi-status');
+const regionCount = document.querySelector('#region-count');
+const regionPicker = document.querySelector('#region-picker');
+const regionOptions = document.querySelector('#region-options');
+const regionStatus = document.querySelector('#region-status');
+const regionPopupElement = document.querySelector('#region-popup');
+const regionPopupName = document.querySelector('#region-popup-name');
+const closeRegionPopup = document.querySelector('#close-region-popup');
+const regionAboutPanel = document.querySelector('#region-about-panel');
+const regionAboutTitle = document.querySelector('#region-about-title');
+const regionAboutDescription = document.querySelector('#region-about-description');
+const regionAboutSource = document.querySelector('#region-about-source');
+const closeRegionAbout = document.querySelector('#close-region-about');
 const latitudeInput = form.elements.namedItem('latitude');
 const longitudeInput = form.elements.namedItem('longitude');
 const startInput = form.elements.namedItem('start');
@@ -51,15 +88,70 @@ const stopInput = form.elements.namedItem('stop');
 const pageSize = 8;
 let result;
 let page = 0;
+const compareEnabled = document.querySelector('#compare-enabled');
+const compareCoordinates = document.querySelector('#compare-coordinates');
+const compareLatitudeInput = document.querySelector('#compare-latitude');
+const compareLongitudeInput = document.querySelector('#compare-longitude');
+const comparisonReadings = document.querySelector('#comparison-readings');
+const comparisonSiteLabel = document.querySelector('#comparison-site-label');
+const compareSunReading = document.querySelector('#compare-sun-reading');
+const compareEarthReading = document.querySelector('#compare-earth-reading');
+const compareSunDifference = document.querySelector('#compare-sun-difference');
+const compareEarthDifference = document.querySelector('#compare-earth-difference');
+const siteBKey = document.querySelector('#site-b-key');
+const siteRecommendation = document.querySelector('#site-recommendation');
+const recommendationTitle = document.querySelector('#recommendation-title');
+const recommendationDetails = document.querySelector('#recommendation-details');
+let comparisonResult;
+let comparisonParams;
+let resultParams;
+let assessmentSite = 'a';
 let currentIndex = 0;
 let playbackTimer;
 let pointsOfInterest = [];
 let globeSites = [];
 let globe;
+let mapNeedsInitialFit = true;
 const globePresets = ['IM-2', 'IM-1', 'Chandrayaan-3', 'Apollo 11', 'Apollo 17', "Chang'e 4"];
 const globeSiteButtons = new Map();
 const selectedPoiIndexes = new Set();
+let regions = [];
+const selectedRegionIndexes = new Set();
+let activeRegionIndex;
+let activeAboutRegionIndex;
 let chartZoom;
+let lolaRequest;
+const lolaTileViews = [];
+let lolaTileViewIndex = 0;
+
+function renderLolaTileView() {
+  if (!lolaPreview || !lolaSpotPreview || !lolaPrevView || !lolaNextView || !lolaViewLabel) return;
+  const hasViews = lolaTileViews.length > 0;
+  lolaPreview.hidden = true;
+  lolaSpotPreview.hidden = true;
+  if (!hasViews) {
+    lolaViewLabel.textContent = 'No tile';
+    lolaPrevView.disabled = true;
+    lolaNextView.disabled = true;
+    return;
+  }
+  const current = lolaTileViews[lolaTileViewIndex];
+  if (current?.key === 'dem') lolaPreview.hidden = false;
+  if (current?.key === 'spot') lolaSpotPreview.hidden = false;
+  lolaViewLabel.textContent = current?.label ?? 'Tile';
+  const canNavigate = lolaTileViews.length > 1;
+  lolaPrevView.disabled = !canNavigate;
+  lolaNextView.disabled = !canNavigate;
+}
+
+function cycleLolaTileView(direction) {
+  if (lolaTileViews.length < 2) return;
+  lolaTileViewIndex = (lolaTileViewIndex + direction + lolaTileViews.length) % lolaTileViews.length;
+  renderLolaTileView();
+}
+
+lolaPrevView?.addEventListener('click', () => cycleLolaTileView(-1));
+lolaNextView?.addEventListener('click', () => cycleLolaTileView(1));
 
 const lunarExtent = [-180, -90, 180, 90];
 const lunarProjection = new ol.proj.Projection({
@@ -84,6 +176,15 @@ ol.proj.addProjection(southPolarProjection);
 
 const markerSource = new ol.source.Vector();
 const poiSource = new ol.source.Vector();
+const regionSource = new ol.source.Vector();
+
+function regionColor(index, opacity) {
+  const hue = ((index * 137.508) % 360).toFixed(1);
+  return opacity === undefined ?
+    'hsl(' + hue + ' 76% 57%)' :
+    'hsla(' + hue + ', 76%, 57%, ' + opacity + ')';
+}
+
 function createImageryLayer(url, projection, spatialReference) {
   const source = new ol.source.ImageArcGISRest({
     url,
@@ -161,6 +262,13 @@ const lunarMap = new ol.Map({
     polarDetailLayers['north-pole'],
     polarDetailLayers['south-pole'],
     new ol.layer.Vector({
+      source: regionSource,
+      style: feature => new ol.style.Style({
+        fill: new ol.style.Fill({ color: regionColor(feature.get('regionIndex'), 0.26) }),
+        stroke: new ol.style.Stroke({ color: regionColor(feature.get('regionIndex')), width: 2 })
+      })
+    }),
+    new ol.layer.Vector({
       source: poiSource,
       style: feature => [
         new ol.style.Style({
@@ -207,6 +315,57 @@ const lunarMap = new ol.Map({
   ],
   view: createMapView('global')
 });
+
+const regionPopupOverlay = new ol.Overlay({
+  element: regionPopupElement,
+  positioning: 'bottom-center',
+  offset: [0, -12],
+  stopEvent: true
+});
+lunarMap.addOverlay(regionPopupOverlay);
+
+function hideRegionPopup() {
+  activeRegionIndex = undefined;
+  regionPopupElement.hidden = true;
+  regionPopupOverlay.setPosition(undefined);
+}
+
+function showRegionPopup(index, coordinate) {
+  const region = regions[index];
+  if (!region) return;
+  activeRegionIndex = index;
+  regionPopupName.textContent = region.name;
+  regionPopupElement.hidden = false;
+  regionPopupOverlay.setPosition(coordinate);
+}
+
+closeRegionPopup.addEventListener('click', hideRegionPopup);
+
+function hideRegionAbout() {
+  activeAboutRegionIndex = undefined;
+  regionAboutPanel.hidden = true;
+}
+
+function showRegionAbout(index) {
+  const region = regions[index];
+  if (!region || !region.description) {
+    hideRegionAbout();
+    return;
+  }
+  activeAboutRegionIndex = index;
+  regionAboutTitle.textContent = region.name;
+  regionAboutDescription.textContent = region.description;
+  if (region.descriptionSource) {
+    regionAboutSource.href = region.descriptionSource;
+    regionAboutSource.hidden = false;
+  } else {
+    regionAboutSource.removeAttribute('href');
+    regionAboutSource.hidden = true;
+  }
+  regionAboutPanel.hidden = false;
+}
+
+closeRegionAbout.addEventListener('click', hideRegionAbout);
 
 const lunarRadius = 1737400;
 
@@ -285,9 +444,7 @@ function updateSelectedSite(latitude, longitude) {
   latitudeInput.value = latitude.toFixed(6);
   longitudeInput.value = longitudeEast.toFixed(6);
   mapCoordinates.textContent = 'Lat ' + latitude.toFixed(3) + '° · Lon ' + longitudeEast.toFixed(3) + '° E';
-  const preset = globeSites.find(site => site.latitude.toFixed(6) === latitudeInput.value &&
-    eastLongitude(site.longitude).toFixed(6) === longitudeInput.value);
-  highlightGlobeSite(preset);
+  updateGlobeSelection();
   markerSource.clear();
   const mapView = mapViewSelect.value;
   const coordinate = coordinateForSite(latitude, longitudeEast, mapView);
@@ -296,6 +453,94 @@ function updateSelectedSite(latitude, longitude) {
       coordinate[1] >= extent[1] && coordinate[1] <= extent[3]) {
     markerSource.addFeature(new ol.Feature(new ol.geom.Point(coordinate)));
   }
+  updateLolaDem(latitude, longitudeEast);
+}
+
+function updateLolaDem(latitude, longitudeEast) {
+  if (!lolaStatus || !quantStats || !demDetails || !lolaPreview) return;
+  if (lolaRequest) lolaRequest.abort();
+  lolaRequest = new AbortController();
+  lolaStatus.textContent = 'Loading LOLA DEM tile and terrain metrics…';
+  quantStats.textContent = 'DEM quantitative metrics pending.';
+  demDetails.textContent = 'Aspect, roughness, curvature, and hazard indicators pending.';
+  lolaTileViews.length = 0;
+  lolaTileViewIndex = 0;
+  lolaPreview.hidden = true;
+  if (lolaSpotPreview) lolaSpotPreview.hidden = true;
+  renderLolaTileView();
+
+  const params = new URLSearchParams({ latitude: String(latitude), longitude: String(longitudeEast) });
+  fetch('/api/lola?' + params, { signal: lolaRequest.signal })
+    .then(async response => {
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error ?? 'LOLA DEM request failed.');
+      lolaPreview.src = payload.tile.previewUrl;
+      lolaTileViews.push({ key: 'dem', label: 'DEM tile' });
+      if (payload.spotObservations?.previewDataUrl && lolaSpotPreview) {
+        lolaSpotPreview.src = payload.spotObservations.previewDataUrl;
+        lolaTileViews.push({ key: 'spot', label: 'Spot observations' });
+      }
+      lolaTileViewIndex = 0;
+      renderLolaTileView();
+
+      const stats = payload.topography?.elevation;
+      const local = payload.topography?.local;
+      const aspect = payload.topography?.aspect;
+      const roughness = payload.topography?.roughness;
+      const curvature = payload.topography?.curvature;
+      const hazard = payload.topography?.hazard;
+
+      lolaStatus.textContent = payload.dataset.title + ' loaded for Lat ' + latitude.toFixed(3) +
+        '°, Lon ' + longitudeEast.toFixed(3) + '° E.';
+
+      if (stats && local) {
+        quantStats.textContent =
+          'Site elevation: ' + payload.elevationMeters.toFixed(1) + ' m\n' +
+          'Min/Max: ' + stats.minMeters.toFixed(1) + ' / ' + stats.maxMeters.toFixed(1) + ' m\n' +
+          'Mean/Median: ' + stats.meanMeters.toFixed(1) + ' / ' + stats.medianMeters.toFixed(1) + ' m\n' +
+          'Std dev: ' + stats.stdDevMeters.toFixed(2) + ' m\n' +
+          'Slope (avg/max): ' + local.slopeMeanDeg.toFixed(2) + '° / ' + local.slopeMaxDeg.toFixed(2) + '°';
+      } else {
+        quantStats.textContent = 'Site ' + payload.elevationMeters.toFixed(1) +
+          ' m · detailed topography metrics unavailable for this request.';
+      }
+
+      if (aspect && roughness && curvature && hazard) {
+        demDetails.textContent =
+          'Aspect (downslope): ' + aspect.downslopeAzimuthDeg.toFixed(1) + '°\n' +
+          'Roughness RMS / TRI: ' + roughness.rmsMeters.toFixed(2) + ' / ' + roughness.triMeters.toFixed(2) + ' m\n' +
+          'Moving roughness std: ' + roughness.movingWindowStdDevMeters.toFixed(2) + ' m\n' +
+          'Curvature (profile/plan/total): ' + curvature.profileMeanPerMeter.toExponential(2) + ' / ' +
+          curvature.planMeanPerMeter.toExponential(2) + ' / ' + curvature.totalPerMeter.toExponential(2) + '\n' +
+          'Local relief: ' + hazard.localReliefMeters.toFixed(1) + ' m\n' +
+          'Slope > 10°: ' + (hazard.slopeExceedanceFractions.over10Deg * 100).toFixed(1) + '%\n' +
+          'Open sky: ' + (hazard.horizonExposure.openSkyFraction * 100).toFixed(1) + '%';
+      } else {
+        demDetails.textContent = 'Aspect, roughness, curvature, and hazard indicators are unavailable for this request.';
+      }
+
+      if (payload.topographyError) {
+        demDetails.textContent = 'Topography note: ' + payload.topographyError;
+      }
+
+      if (!payload.spotObservations?.previewDataUrl) {
+        demDetails.textContent += ' LOLA spot observations are unavailable for this location.';
+      }
+    })
+    .catch(error => {
+      if (error.name === 'AbortError') return;
+      lolaStatus.textContent = 'LOLA DEM unavailable: ' + error.message;
+      quantStats.textContent = 'DEM quantitative metrics unavailable.';
+      demDetails.textContent = 'Could not compute aspect, roughness, curvature, or hazard indicators.';
+      lolaTileViews.length = 0;
+      lolaTileViewIndex = 0;
+      lolaPreview.hidden = true;
+      if (lolaSpotPreview) lolaSpotPreview.hidden = true;
+      renderLolaTileView();
+    })
+    .finally(() => {
+      lolaRequest = undefined;
+    });
 }
 
 function updateMarkerFromInputs() {
@@ -317,6 +562,12 @@ function highlightGlobeSite(site) {
     button.setAttribute('aria-pressed', String(site === preset));
   }
   globe?.select(site);
+}
+
+function updateGlobeSelection() {
+  const preset = globeSites.find(site => site.latitude.toFixed(6) === latitudeInput.value &&
+    eastLongitude(site.longitude).toFixed(6) === longitudeInput.value);
+  highlightGlobeSite(preset);
 }
 
 function chooseGlobeSite(site) {
@@ -345,7 +596,7 @@ function renderGlobeSites() {
   }
   globeList.replaceChildren(...globeSiteButtons.values());
   globe?.setSites(globeSites);
-  updateMarkerFromInputs();
+  updateGlobeSelection();
 }
 
 async function initializeGlobe() {
@@ -357,7 +608,7 @@ async function initializeGlobe() {
       onSelect: chooseGlobeSite
     });
     globe.setSites(globeSites);
-    updateMarkerFromInputs();
+    updateGlobeSelection();
     globeStatus.hidden = true;
     globeReset.disabled = false;
   } catch (error) {
@@ -372,8 +623,14 @@ function showSiteView(isGlobe) {
   globePanel.hidden = !isGlobe;
   map2d.hidden = isGlobe;
   mapInstructions.textContent = isGlobe ? 'Choose a preset site on the globe or from the list.' :
-    'Click the Moon to set coordinates, or select sites below to highlight them.';
-  if (!isGlobe) lunarMap.updateSize();
+    'Click the Moon to set coordinates, or use the controls below to highlight sites and regions.';
+  if (!isGlobe) {
+    lunarMap.updateSize();
+    if (mapNeedsInitialFit) {
+      lunarMap.setView(createMapView(mapViewSelect.value));
+      mapNeedsInitialFit = false;
+    }
+  }
 }
 
 function updatePoiHighlights() {
@@ -391,42 +648,451 @@ function updatePoiHighlights() {
   poiSource.addFeatures(features);
 }
 
-function renderPoiOptions() {
-  const options = pointsOfInterest.map((site, index) => {
-    const label = document.createElement('label');
-    label.className = 'poi-option';
-    const checkbox = document.createElement('input');
-    checkbox.type = 'checkbox';
-    checkbox.value = String(index);
-    checkbox.addEventListener('change', () => {
-      if (checkbox.checked) {
-        selectedPoiIndexes.add(index);
-        selectPoiSite(site);
-      } else {
-        selectedPoiIndexes.delete(index);
-      }
-      poiCount.textContent = selectedPoiIndexes.size + ' selected';
-      updatePoiHighlights();
-    });
+function poiProgram(mission) {
+  const programs = [
+    [/^Apollo\b/i, 'Apollo'],
+    [/^(?:IM-\d+|Intuitive Machines)\b/i, 'Intuitive Machines'],
+    [/^Blue Ghost\b/i, 'Blue Ghost'],
+    [/^Chandrayaan\b/i, 'Chandrayaan'],
+    [/^Chang['’]e\b/i, "Chang'e"],
+    [/^Luna\b/i, 'Luna'],
+    [/^Surveyor\b/i, 'Surveyor'],
+    [/^SLIM\b/i, 'SLIM']
+  ];
+  return programs.find(([pattern]) => pattern.test(mission))?.[1] || 'Other missions';
+}
 
-    const copy = document.createElement('span');
-    copy.className = 'poi-option-copy';
-    const mission = document.createElement('strong');
-    mission.textContent = site.mission;
-    const coordinates = document.createElement('small');
-    coordinates.textContent = site.latitude.toFixed(3) + '°, ' +
-      eastLongitude(site.longitude).toFixed(3) + '° E · ' + site.date + ' ' + site.time;
-    copy.append(mission, coordinates);
-    label.append(checkbox, copy);
-    return label;
-  });
-  if (!options.length) {
+function updatePoiSelection() {
+  poiCount.textContent = selectedPoiIndexes.size + ' selected';
+  updatePoiHighlights();
+}
+
+function renderPoiOptions() {
+  if (!pointsOfInterest.length) {
     const emptyMessage = document.createElement('p');
     emptyMessage.textContent = 'No sites configured. Add entries to public/data/points-of-interest.json.';
     poiOptions.replaceChildren(emptyMessage);
     return;
   }
+
+  const groups = new Map();
+  pointsOfInterest.forEach((site, index) => {
+    const program = poiProgram(site.mission);
+    if (!groups.has(program)) groups.set(program, []);
+    groups.get(program).push({ site, index });
+  });
+
+  const options = [...groups].map(([program, entries]) => {
+    const group = document.createElement('section');
+    group.className = 'poi-program';
+
+    const heading = document.createElement('div');
+    heading.className = 'poi-program-heading';
+
+    const groupLabel = document.createElement('label');
+    groupLabel.className = 'poi-program-toggle';
+    const groupCheckbox = document.createElement('input');
+    groupCheckbox.type = 'checkbox';
+    groupCheckbox.setAttribute('aria-label', 'Select all ' + program + ' missions');
+
+    const groupName = document.createElement('span');
+    groupName.textContent = program;
+    groupLabel.append(groupCheckbox, groupName);
+
+    const expander = document.createElement('button');
+    expander.type = 'button';
+    expander.className = 'poi-program-expander';
+    expander.setAttribute('aria-expanded', 'false');
+    expander.setAttribute('aria-label', 'Expand ' + program + ' missions');
+    expander.textContent = entries.length + (entries.length === 1 ? ' mission' : ' missions');
+    const items = document.createElement('div');
+    items.className = 'poi-program-items';
+    items.setAttribute('role', 'group');
+    items.setAttribute('aria-label', program + ' missions');
+    items.hidden = true;
+    const itemCheckboxes = [];
+
+    expander.addEventListener('click', () => {
+      items.hidden = !items.hidden;
+      expander.setAttribute('aria-expanded', String(!items.hidden));
+      expander.setAttribute('aria-label', (items.hidden ? 'Expand ' : 'Collapse ') + program + ' missions');
+    });
+
+    function syncGroupCheckbox() {
+      const selectedCount = entries.filter(({ index }) => selectedPoiIndexes.has(index)).length;
+      groupCheckbox.checked = selectedCount === entries.length;
+      groupCheckbox.indeterminate = selectedCount > 0 && selectedCount < entries.length;
+    }
+
+    for (const { site, index } of entries) {
+      const label = document.createElement('label');
+      label.className = 'poi-option';
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.value = String(index);
+      checkbox.checked = selectedPoiIndexes.has(index);
+      checkbox.addEventListener('change', () => {
+        if (checkbox.checked) {
+          selectedPoiIndexes.add(index);
+          selectPoiSite(site);
+        } else {
+          selectedPoiIndexes.delete(index);
+        }
+        syncGroupCheckbox();
+        updatePoiSelection();
+      });
+
+      const copy = document.createElement('span');
+      copy.className = 'poi-option-copy';
+      const mission = document.createElement('strong');
+      mission.textContent = site.mission;
+      const coordinates = document.createElement('small');
+      coordinates.textContent = site.latitude.toFixed(3) + '°, ' +
+        eastLongitude(site.longitude).toFixed(3) + '° E · ' + site.date + ' ' + site.time;
+      copy.append(mission, coordinates);
+      label.append(checkbox, copy);
+      items.append(label);
+      itemCheckboxes.push(checkbox);
+    }
+
+    groupCheckbox.addEventListener('change', () => {
+      for (const checkbox of itemCheckboxes) {
+        const index = Number(checkbox.value);
+        checkbox.checked = groupCheckbox.checked;
+        if (groupCheckbox.checked) selectedPoiIndexes.add(index);
+        else selectedPoiIndexes.delete(index);
+      }
+      if (groupCheckbox.checked) selectPoiSite(entries[0].site);
+      updatePoiSelection();
+    });
+
+    syncGroupCheckbox();
+    heading.append(groupLabel, expander);
+    group.append(heading, items);
+    return group;
+  });
   poiOptions.replaceChildren(...options);
+}
+
+function angularDistanceBetween(start, end) {
+  const radians = point => {
+    const longitude = point[0] * Math.PI / 180;
+    const latitude = point[1] * Math.PI / 180;
+    return [
+      Math.cos(latitude) * Math.cos(longitude),
+      Math.cos(latitude) * Math.sin(longitude),
+      Math.sin(latitude)
+    ];
+  };
+  const first = radians(start);
+  const second = radians(end);
+  const dot = Math.max(-1, Math.min(1,
+    first[0] * second[0] + first[1] * second[1] + first[2] * second[2]));
+  return Math.acos(dot);
+}
+
+function greatCirclePoint(start, end, fraction) {
+  const radians = point => {
+    const longitude = point[0] * Math.PI / 180;
+    const latitude = point[1] * Math.PI / 180;
+    return [
+      Math.cos(latitude) * Math.cos(longitude),
+      Math.cos(latitude) * Math.sin(longitude),
+      Math.sin(latitude)
+    ];
+  };
+  const first = radians(start);
+  const second = radians(end);
+  const angle = angularDistanceBetween(start, end);
+  if (angle < 1e-8) return [start[0], start[1]];
+
+  const scale = Math.sin(angle);
+  const firstScale = Math.sin((1 - fraction) * angle) / scale;
+  const secondScale = Math.sin(fraction * angle) / scale;
+  const x = first[0] * firstScale + second[0] * secondScale;
+  const y = first[1] * firstScale + second[1] * secondScale;
+  const z = first[2] * firstScale + second[2] * secondScale;
+  return [
+    Math.atan2(y, x) * 180 / Math.PI,
+    Math.atan2(z, Math.hypot(x, y)) * 180 / Math.PI
+  ];
+}
+
+function densifyGeographicRing(ring) {
+  const coordinates = [];
+  for (let index = 0; index < ring.length - 1; index++) {
+    const start = ring[index];
+    const end = ring[index + 1];
+    const segments = Math.max(1, Math.ceil(
+      angularDistanceBetween(start, end) * lunarRadius / 10000
+    ));
+    for (let segment = 0; segment < segments; segment++) {
+      coordinates.push(greatCirclePoint(start, end, segment / segments));
+    }
+  }
+  coordinates.push(ring[ring.length - 1]);
+  return coordinates;
+}
+
+function projectGeographicRing(ring, mapView) {
+  const coordinates = densifyGeographicRing(ring);
+  if (mapView !== 'global') {
+    return coordinates.map(([longitude, latitude]) =>
+      coordinateForSite(latitude, longitude, mapView)
+    );
+  }
+
+  let previousLongitude;
+  return coordinates.map(([longitude, latitude], index) => {
+    if (index > 0) {
+      while (longitude - previousLongitude > 180) longitude -= 360;
+      while (longitude - previousLongitude < -180) longitude += 360;
+    }
+    previousLongitude = longitude;
+    return [longitude, latitude];
+  });
+}
+
+function updateRegionHighlights() {
+  if (activeRegionIndex !== undefined && !selectedRegionIndexes.has(activeRegionIndex)) {
+    hideRegionPopup();
+  }
+  const mapView = mapViewSelect.value;
+  const features = [...selectedRegionIndexes].flatMap(index => {
+    const region = regions[index];
+    const projectedRings = region.coordinates.map(ring => projectGeographicRing(ring, mapView));
+    let minLongitude = Infinity;
+    let maxLongitude = -Infinity;
+    projectedRings.forEach(ring => ring.forEach(([longitude]) => {
+      minLongitude = Math.min(minLongitude, longitude);
+      maxLongitude = Math.max(maxLongitude, longitude);
+    }));
+    const offsets = mapView === 'global' ?
+      [0, ...(minLongitude < -180 ? [360] : []),
+        ...(maxLongitude > 180 ? [-360] : [])] : [0];
+    return offsets.map(offset => {
+      const rings = offset === 0 ? projectedRings :
+        projectedRings.map(ring => ring.map(([x, y]) => [x + offset, y]));
+      const feature = new ol.Feature(new ol.geom.Polygon(rings));
+      feature.set('regionIndex', index);
+      return feature;
+    });
+  });
+  regionSource.clear();
+  regionSource.addFeatures(features);
+}
+
+function updateRegionSelection() {
+  regionCount.textContent = selectedRegionIndexes.size + ' selected';
+  if (activeAboutRegionIndex !== undefined &&
+      !selectedRegionIndexes.has(activeAboutRegionIndex)) {
+    hideRegionAbout();
+  }
+  updateRegionHighlights();
+}
+
+function validateRegions(payload) {
+  if (!payload || payload.type !== 'FeatureCollection' || !Array.isArray(payload.features)) {
+    throw new Error('The JSON file must contain a GeoJSON FeatureCollection.');
+  }
+  const ids = new Set();
+  return payload.features.map((feature, index) => {
+    const properties = feature && feature.properties;
+    const id = properties && properties.id;
+    const entry = 'Region ' + (index + 1);
+    if (!properties || typeof properties !== 'object') {
+      throw new Error(entry + ' needs properties.');
+    }
+    if (typeof id !== 'string' || !id.trim() || ids.has(id)) {
+      throw new Error(entry + ' needs a unique string id.');
+    }
+    if (typeof properties.name !== 'string' || !properties.name.trim() ||
+        typeof properties.group !== 'string' || !properties.group.trim()) {
+      throw new Error(entry + ' needs a name and group.');
+    }
+    if (!feature.geometry || feature.geometry.type !== 'Polygon' ||
+        !Array.isArray(feature.geometry.coordinates) || !feature.geometry.coordinates.length) {
+      throw new Error(entry + ' needs a polygon geometry.');
+    }
+
+    const coordinates = feature.geometry.coordinates.map((ring, ringIndex) => {
+      if (!Array.isArray(ring) || ring.length < 4) {
+        throw new Error(entry + ' polygon ring ' + (ringIndex + 1) + ' needs at least four points.');
+      }
+      return ring.map((point, pointIndex) => {
+        if (!Array.isArray(point) || point.length < 2 ||
+            typeof point[0] !== 'number' || !Number.isFinite(point[0]) ||
+            point[0] < -180 || point[0] > 180 ||
+            typeof point[1] !== 'number' || !Number.isFinite(point[1]) ||
+            point[1] < -90 || point[1] > 90) {
+          throw new Error(entry + ' point ' + (pointIndex + 1) +
+            ' needs longitude and latitude within the lunar coordinate range.');
+        }
+        return [point[0], point[1]];
+      });
+    });
+    if (coordinates.some(ring =>
+      ring[0][0] !== ring[ring.length - 1][0] ||
+      ring[0][1] !== ring[ring.length - 1][1]
+    )) {
+      throw new Error(entry + ' polygon rings must be closed.');
+    }
+
+    const description = typeof properties.description === 'string' ? properties.description.trim() : '';
+    const descriptionSource = typeof properties.descriptionSource === 'string' ?
+      properties.descriptionSource.trim() : '';
+    if (descriptionSource) {
+      let sourceUrl;
+      try {
+        sourceUrl = new URL(descriptionSource);
+      } catch {
+        throw new Error(entry + ' description source must be a valid HTTPS URL.');
+      }
+      if (sourceUrl.protocol !== 'https:') {
+        throw new Error(entry + ' description source must be a valid HTTPS URL.');
+      }
+    }
+
+    ids.add(id);
+    return {
+      id,
+      name: properties.name.trim(),
+      group: properties.group.trim(),
+      description,
+      descriptionSource,
+      coordinates
+    };
+  });
+}
+
+function renderRegionOptions() {
+  if (!regions.length) {
+    const emptyMessage = document.createElement('p');
+    emptyMessage.textContent = 'No regions configured. Add entries to public/data/regions-of-interest.json.';
+    regionOptions.replaceChildren(emptyMessage);
+    return;
+  }
+
+  const groups = new Map();
+  regions.forEach((region, index) => {
+    if (!groups.has(region.group)) groups.set(region.group, []);
+    groups.get(region.group).push({ region, index });
+  });
+
+  const options = [...groups].map(([groupName, entries]) => {
+    const group = document.createElement('section');
+    group.className = 'region-group';
+
+    const heading = document.createElement('div');
+    heading.className = 'poi-program-heading';
+    const groupLabel = document.createElement('label');
+    groupLabel.className = 'poi-program-toggle';
+    const groupCheckbox = document.createElement('input');
+    groupCheckbox.type = 'checkbox';
+    groupCheckbox.setAttribute('aria-label', 'Select all ' + groupName);
+    const title = document.createElement('span');
+    title.textContent = groupName;
+    groupLabel.append(groupCheckbox, title);
+
+    const expander = document.createElement('button');
+    expander.type = 'button';
+    expander.className = 'poi-program-expander';
+    expander.setAttribute('aria-expanded', 'false');
+    expander.setAttribute('aria-label', 'Expand ' + groupName);
+    expander.textContent = entries.length + (entries.length === 1 ? ' region' : ' regions');
+
+    const items = document.createElement('div');
+    items.className = 'poi-program-items';
+    items.setAttribute('role', 'group');
+    items.setAttribute('aria-label', groupName);
+    items.hidden = true;
+    const itemCheckboxes = [];
+
+    function syncGroupCheckbox() {
+      const selectedCount = entries.filter(({ index }) => selectedRegionIndexes.has(index)).length;
+      groupCheckbox.checked = selectedCount === entries.length;
+      groupCheckbox.indeterminate = selectedCount > 0 && selectedCount < entries.length;
+    }
+
+    expander.addEventListener('click', () => {
+      items.hidden = !items.hidden;
+      expander.setAttribute('aria-expanded', String(!items.hidden));
+      expander.setAttribute('aria-label',
+        (items.hidden ? 'Expand ' : 'Collapse ') + groupName);
+    });
+
+    for (const { region, index } of entries) {
+      const option = document.createElement('div');
+      option.className = 'region-option';
+      const label = document.createElement('label');
+      label.className = 'poi-option';
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.value = String(index);
+      checkbox.checked = selectedRegionIndexes.has(index);
+      checkbox.addEventListener('change', () => {
+        if (checkbox.checked) {
+          selectedRegionIndexes.add(index);
+          showRegionAbout(index);
+        } else {
+          selectedRegionIndexes.delete(index);
+        }
+        syncGroupCheckbox();
+        updateRegionSelection();
+      });
+
+      const swatch = document.createElement('span');
+      swatch.className = 'region-swatch';
+      swatch.style.backgroundColor = regionColor(index);
+      const copy = document.createElement('span');
+      copy.className = 'poi-option-copy';
+      const name = document.createElement('strong');
+      name.textContent = region.name;
+      copy.append(name);
+      label.append(checkbox, swatch, copy);
+      option.append(label);
+      items.append(option);
+      itemCheckboxes.push(checkbox);
+    }
+
+    groupCheckbox.addEventListener('change', () => {
+      for (const checkbox of itemCheckboxes) {
+        const index = Number(checkbox.value);
+        checkbox.checked = groupCheckbox.checked;
+        if (groupCheckbox.checked) selectedRegionIndexes.add(index);
+        else selectedRegionIndexes.delete(index);
+      }
+      if (groupCheckbox.checked && entries.length === 1) {
+        showRegionAbout(entries[0].index);
+      }
+      updateRegionSelection();
+    });
+
+    syncGroupCheckbox();
+    heading.append(groupLabel, expander);
+    group.append(heading, items);
+    return group;
+  });
+  regionOptions.replaceChildren(...options);
+}
+
+async function loadRegions() {
+  try {
+    const response = await fetch('/data/regions-of-interest.json');
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    regions = validateRegions(await response.json());
+    renderRegionOptions();
+    regionStatus.classList.remove('error');
+    regionStatus.hidden = true;
+    regionStatus.textContent = '';
+  } catch (error) {
+    const unavailable = document.createElement('p');
+    unavailable.textContent = 'Region list unavailable. See the status below.';
+    regionOptions.replaceChildren(unavailable);
+    regionStatus.classList.add('error');
+    regionStatus.hidden = false;
+    regionStatus.textContent = 'Could not load lunar regions: ' + error.message;
+  }
 }
 
 function validatePointsOfInterest(payload) {
@@ -488,9 +1154,11 @@ async function loadPointsOfInterest() {
 
 document.addEventListener('click', event => {
   if (poiPicker.open && !poiPicker.contains(event.target)) poiPicker.open = false;
+  if (regionPicker.open && !regionPicker.contains(event.target)) regionPicker.open = false;
 });
 
 mapViewSelect.addEventListener('change', () => {
+  hideRegionPopup();
   for (const [name, layer] of Object.entries(imageryLayers)) {
     layer.setVisible(name === mapViewSelect.value);
   }
@@ -500,23 +1168,36 @@ mapViewSelect.addEventListener('change', () => {
   lunarMap.setView(createMapView(mapViewSelect.value));
   updateMarkerFromInputs();
   updatePoiHighlights();
+  updateRegionHighlights();
 });
 lunarMap.on('singleclick', event => {
   let clickedPoi;
+  let clickedRegion;
   lunarMap.forEachFeatureAtPixel(event.pixel, feature => {
     if (Number.isInteger(feature.get('poiIndex'))) {
       clickedPoi = feature;
       return true;
     }
+    if (!clickedRegion && Number.isInteger(feature.get('regionIndex'))) {
+      clickedRegion = feature;
+    }
     return undefined;
   }, { hitTolerance: 8 });
   if (clickedPoi) {
+    hideRegionPopup();
     const site = pointsOfInterest[clickedPoi.get('poiIndex')];
     selectPoiSite(site);
     return;
   }
   const [longitude, latitude] = mapViewSelect.value === 'global' ?
     event.coordinate : polarToGeographic(event.coordinate, mapViewSelect.value === 'north-pole' ? 'north' : 'south');
+  if (clickedRegion) {
+    const regionIndex = clickedRegion.get('regionIndex');
+    showRegionPopup(regionIndex, event.coordinate);
+    showRegionAbout(regionIndex);
+  } else {
+    hideRegionPopup();
+  }
   updateSelectedSite(latitude, longitude);
 });
 latitudeInput.addEventListener('change', updateMarkerFromInputs);
@@ -534,15 +1215,31 @@ function renderTable() {
     const row = document.createElement('tr');
     const terrain = result.terrain ? terrainAtAzimuth(result.terrain.horizons, sun.azimuth) : undefined;
     const earthTerrain = result.terrain ? terrainAtAzimuth(result.terrain.horizons, earth.azimuth) : undefined;
-    for (const value of [
+    const terrainLabel = (position, horizon) => horizon
+      ? (position.elevation >= 0 && position.elevation <= horizon.horizonElevation ? 'Blocked' : 'Clear') +
+        ' · horizon ' + horizon.horizonElevation.toFixed(2) + '°'
+      : 'Unavailable';
+    const values = [
       time.slice(0, 16).replace('T', ' '),
       sun.azimuth.toFixed(6),
       sun.elevation.toFixed(6),
-      terrain ? (sun.elevation >= 0 && sun.elevation <= terrain.horizonElevation ? 'Blocked' : 'Clear') + ' · horizon ' + terrain.horizonElevation.toFixed(2) + '°' : 'Unavailable',
+      terrainLabel(sun, terrain),
       earth.azimuth.toFixed(6),
       earth.elevation.toFixed(6),
-      earthTerrain ? (earth.elevation >= 0 && earth.elevation <= earthTerrain.horizonElevation ? 'Blocked' : 'Clear') + ' · horizon ' + earthTerrain.horizonElevation.toFixed(2) + '°' : 'Unavailable'
-    ]) {
+      terrainLabel(earth, earthTerrain)
+    ];
+    if (comparisonResult) {
+      const comparison = comparisonResult.rows[start + index];
+      const compareSunTerrain = comparisonResult.terrain
+        ? terrainAtAzimuth(comparisonResult.terrain.horizons, comparison.sun.azimuth) : undefined;
+      const compareEarthTerrain = comparisonResult.terrain
+        ? terrainAtAzimuth(comparisonResult.terrain.horizons, comparison.earth.azimuth) : undefined;
+      values.push(comparison.sun.azimuth.toFixed(6), comparison.sun.elevation.toFixed(6),
+        terrainLabel(comparison.sun, compareSunTerrain),
+        comparison.earth.azimuth.toFixed(6), comparison.earth.elevation.toFixed(6),
+        terrainLabel(comparison.earth, compareEarthTerrain));
+    }
+    for (const value of values) {
       const cell = row.insertCell();
       cell.textContent = value;
     }
@@ -564,6 +1261,7 @@ function terrainAtAzimuth(horizons, azimuth) {
   });
 }
 loadPointsOfInterest();
+loadRegions();
 
 function drawChart() {
   const width = canvas.clientWidth;
@@ -586,7 +1284,9 @@ function drawChart() {
   const x = azimuth => plot.left + (relativeAzimuth(azimuth) - (viewCenter - viewSpan / 2)) / viewSpan * (plot.right - plot.left);
   const zoomValues = chartZoom ? [
     ...result[chartZoom.target].rows.filter(row => Math.abs(relativeAzimuth(row.azimuth) - viewCenter) <= viewSpan / 2).map(row => row.elevation),
-    ...(result.terrain?.horizons ?? []).filter(point => Math.abs(relativeAzimuth(point.azimuth) - viewCenter) <= viewSpan / 2).map(point => point.horizonElevation)
+    ...(result.terrain?.horizons ?? []).filter(point => Math.abs(relativeAzimuth(point.azimuth) - viewCenter) <= viewSpan / 2).map(point => point.horizonElevation),
+    ...(comparisonResult?.[chartZoom.target].rows ?? []).filter(row => Math.abs(relativeAzimuth(row.azimuth) - viewCenter) <= viewSpan / 2).map(row => row.elevation),
+    ...(comparisonResult?.terrain?.horizons ?? []).filter(point => Math.abs(relativeAzimuth(point.azimuth) - viewCenter) <= viewSpan / 2).map(point => point.horizonElevation)
   ] : [];
   const zoomMinimum = zoomValues.length ? Math.max(-90, Math.min(...zoomValues) - 3) : -90;
   const zoomMaximum = zoomValues.length ? Math.min(90, Math.max(...zoomValues) + 3) : 90;
@@ -594,21 +1294,30 @@ function drawChart() {
   const yMaximum = chartZoom ? zoomMaximum : 90;
   const y = elevation => plot.bottom - (Math.max(yMinimum, Math.min(yMaximum, elevation)) - yMinimum) / (yMaximum - yMinimum) * (plot.bottom - plot.top);
 
-  function drawTerrainHorizon() {
-    const horizons = result.terrain?.horizons;
+  function drawTerrainHorizon(siteResult, isComparison) {
+    const horizons = siteResult.terrain?.horizons;
     if (!horizons?.length) return;
     context.beginPath();
     context.strokeStyle = '#c8cdd2';
     context.lineWidth = 3;
-    context.setLineDash([8, 5]);
+    context.setLineDash(isComparison ? [2, 5] : [8, 5]);
     let started = false;
-    horizons.forEach(point => {
-      const pointAzimuth = relativeAzimuth(point.azimuth);
-      if (chartZoom && (pointAzimuth < viewCenter - viewSpan / 2 || pointAzimuth > viewCenter + viewSpan / 2)) return;
+    let previousAzimuth;
+    horizons.map(point => ({ point, azimuth: relativeAzimuth(point.azimuth) }))
+      .filter(({ azimuth }) => !chartZoom ||
+        (azimuth >= viewCenter - viewSpan / 2 && azimuth <= viewCenter + viewSpan / 2))
+      .sort((first, second) => first.azimuth - second.azimuth)
+      .forEach(({ point, azimuth }) => {
+      if (previousAzimuth !== undefined && azimuth - previousAzimuth > 15) {
+        context.stroke();
+        context.beginPath();
+        started = false;
+      }
       const pointX = x(point.azimuth);
       const pointY = y(point.horizonElevation);
       if (!started) { context.moveTo(pointX, pointY); started = true; }
       else context.lineTo(pointX, pointY);
+      previousAzimuth = azimuth;
     });
     context.stroke();
     context.setLineDash([]);
@@ -634,11 +1343,13 @@ function drawChart() {
     context.moveTo(plot.left, position);
     context.lineTo(plot.right, position);
     context.stroke();
-    context.fillText(elevation + '°', plot.left - 8, position);
+    context.fillText((chartZoom ? elevation.toFixed(1) : elevation) + '°', plot.left - 8, position);
   }
   context.setLineDash([]);
 
-  const azimuthLabels = ['0° N', '90° E', '180° S', '270° W', '360° N'];
+  const azimuthLabels = chartZoom
+    ? [-30, -15, 0, 15, 30].map(offset => Math.round((viewCenter + offset + 360) % 360) + '°')
+    : ['0° N', '90° E', '180° S', '270° W', '360° N'];
   context.textAlign = 'center';
   for (let index = 0; index < azimuthLabels.length; index += 1) {
     const position = plot.left + index / (azimuthLabels.length - 1) * (plot.right - plot.left);
@@ -652,15 +1363,22 @@ function drawChart() {
   context.fillStyle = muted;
   context.fillText('Azimuth (clockwise from north)', (plot.left + plot.right) / 2, height - 17);
   context.save();
-  context.translate(22, (plot.top + plot.bottom) / 2);
+  context.textAlign = 'center';
+  context.textBaseline = 'middle';
+  context.translate(12, (plot.top + plot.bottom) / 2);
   context.rotate(-Math.PI / 2);
   context.fillText('Elevation', 0, 0);
   context.restore();
 
-  const plottedTargets = chartZoom
-    ? [[result[chartZoom.target].rows, chartZoom.target === 'sun' ? sunColor : earthColor]]
-    : [[result.sun.rows, sunColor], [result.earth.rows, earthColor]];
-  for (const [rows, color] of plottedTargets) {
+  const plottedTargets = chartZoom ? [chartZoom.target] : ['sun', 'earth'];
+  const traces = plottedTargets.flatMap(target => {
+    const color = target === 'sun' ? sunColor : earthColor;
+    const siteATrace = { rows: result[target].rows, color, isComparison: false };
+    return comparisonResult
+      ? [siteATrace, { rows: comparisonResult[target].rows, color, isComparison: true }]
+      : [siteATrace];
+  });
+  for (const { rows, color, isComparison } of traces) {
     const aboveSegments = [];
     const belowSegments = [];
     const addSegment = (segments, start, end) => {
@@ -694,34 +1412,42 @@ function drawChart() {
       context.beginPath();
       context.strokeStyle = color;
       context.globalAlpha = opacity;
-      context.lineWidth = 1.5;
+      context.lineWidth = isComparison ? 2 : 1.5;
+      context.setLineDash(isComparison ? [6, 4] : []);
       for (const [startX, startY, endX, endY] of segments) {
         context.moveTo(startX, startY);
         context.lineTo(endX, endY);
       }
       context.stroke();
+      context.setLineDash([]);
     }
     context.globalAlpha = 1;
   }
 
-  const currentTargets = chartZoom
-    ? [[result.rows[currentIndex][chartZoom.target], chartZoom.target === 'sun' ? sunColor : earthColor]]
-    : [[result.rows[currentIndex].sun, sunColor], [result.rows[currentIndex].earth, earthColor]];
-  for (const [row, color] of currentTargets) {
+  const currentTargets = chartZoom ? [chartZoom.target] : ['sun', 'earth'];
+  const currentTracks = currentTargets.flatMap(target => {
+    const color = target === 'sun' ? sunColor : earthColor;
+    const siteATrack = { row: result.rows[currentIndex][target], color, isComparison: false };
+    return comparisonResult
+      ? [siteATrack, { row: comparisonResult.rows[currentIndex][target], color, isComparison: true }]
+      : [siteATrack];
+  });
+  for (const { row, color, isComparison } of currentTracks) {
     context.globalAlpha = row.elevation < 0 ? 0.35 : 1;
     context.beginPath();
-    context.arc(x(row.azimuth), y(row.elevation), 7, 0, 2 * Math.PI);
-    context.fillStyle = color;
+    context.arc(x(row.azimuth), y(row.elevation), isComparison ? 8 : 7, 0, 2 * Math.PI);
+    context.fillStyle = isComparison ? '#17191c' : color;
     context.shadowColor = color;
-    context.shadowBlur = row.elevation < 0 ? 4 : 12;
+    context.shadowBlur = isComparison ? 0 : row.elevation < 0 ? 4 : 12;
     context.fill();
     context.shadowBlur = 0;
-    context.strokeStyle = edge;
-    context.lineWidth = 1;
+    context.strokeStyle = isComparison ? color : edge;
+    context.lineWidth = isComparison ? 2 : 1;
     context.stroke();
     context.globalAlpha = 1;
   }
-  drawTerrainHorizon();
+  drawTerrainHorizon(result, false);
+  if (comparisonResult) drawTerrainHorizon(comparisonResult, true);
 }
 
 canvas.addEventListener('click', event => {
@@ -732,12 +1458,21 @@ canvas.addEventListener('click', event => {
   const clickAzimuth = chartZoom
     ? chartZoom.center - 30 + (event.clientX - bounds.left - plotLeft) / (plotRight - plotLeft) * 60
     : (event.clientX - bounds.left - plotLeft) / (plotRight - plotLeft) * 360;
-  const current = result.rows[currentIndex];
-  const distance = target => Math.abs(((current[target].azimuth - clickAzimuth + 540) % 360) - 180);
+  const angularDistance = azimuth => Math.abs(((azimuth - clickAzimuth + 540) % 360) - 180);
   if (chartZoom) chartZoom = undefined;
-  else if (distance('sun') <= 8) chartZoom = { target: 'sun', center: current.sun.azimuth };
-  else if (distance('earth') <= 8) chartZoom = { target: 'earth', center: current.earth.azimuth };
-  else return;
+  else {
+    const currentRows = [
+      { target: 'sun', row: result.rows[currentIndex].sun },
+      { target: 'earth', row: result.rows[currentIndex].earth },
+      ...(comparisonResult ? [
+        { target: 'sun', row: comparisonResult.rows[currentIndex].sun },
+        { target: 'earth', row: comparisonResult.rows[currentIndex].earth }
+      ] : [])
+    ];
+    const selected = currentRows.find(item => angularDistance(item.row.azimuth) <= 8);
+    if (!selected) return;
+    chartZoom = { target: selected.target, center: selected.row.azimuth };
+  }
   updateCurrentReading();
 });
 
@@ -754,10 +1489,10 @@ function elevationAt(time, rows) {
   return rows[rows.length - 1].elevation;
 }
 
-function terrainHorizonAt(time, target) {
-  if (!result.terrain?.horizons?.length) return 0;
-  const rows = result.rows;
-  const firstTerrain = terrainAtAzimuth(result.terrain.horizons, rows[0][target].azimuth);
+function terrainHorizonAt(time, target, siteResult = result) {
+  if (!siteResult.terrain?.horizons?.length) return 0;
+  const rows = siteResult.rows;
+  const firstTerrain = terrainAtAzimuth(siteResult.terrain.horizons, rows[0][target].azimuth);
   if (time <= Date.parse(rows[0].time)) {
     return firstTerrain?.horizonElevation ?? 0;
   }
@@ -766,24 +1501,24 @@ function terrainHorizonAt(time, target) {
     const after = Date.parse(rows[index].time);
     if (time <= after) {
       const progress = (time - before) / (after - before);
-      const first = terrainAtAzimuth(result.terrain.horizons, rows[index - 1][target].azimuth)?.horizonElevation ?? 0;
-      const last = terrainAtAzimuth(result.terrain.horizons, rows[index][target].azimuth)?.horizonElevation ?? 0;
+      const first = terrainAtAzimuth(siteResult.terrain.horizons, rows[index - 1][target].azimuth)?.horizonElevation ?? 0;
+      const last = terrainAtAzimuth(siteResult.terrain.horizons, rows[index][target].azimuth)?.horizonElevation ?? 0;
       return first + (last - first) * progress;
     }
   }
-  return terrainAtAzimuth(result.terrain.horizons, rows[rows.length - 1][target].azimuth)?.horizonElevation ?? 0;
+  return terrainAtAzimuth(siteResult.terrain.horizons, rows[rows.length - 1][target].azimuth)?.horizonElevation ?? 0;
 }
 
 function updateVisibility(params) {
   const start = Date.parse(params.get('start') + ':00Z');
   const stop = Date.parse(params.get('stop') + ':00Z');
-  const updateTargetVisibility = (label, target, rows, pie, value, duration) => {
+  const updateTargetVisibility = (label, target, rows, pie, value, duration, siteResult) => {
     const times = [start, ...rows.map(row => Date.parse(row.time)).filter(time => time > start && time < stop), stop];
     let above = 0;
     for (let index = 1; index < times.length; index += 1) {
       const interval = times[index] - times[index - 1];
-      const first = elevationAt(times[index - 1], rows) - terrainHorizonAt(times[index - 1], target);
-      const last = elevationAt(times[index], rows) - terrainHorizonAt(times[index], target);
+      const first = elevationAt(times[index - 1], rows) - terrainHorizonAt(times[index - 1], target, siteResult);
+      const last = elevationAt(times[index], rows) - terrainHorizonAt(times[index], target, siteResult);
       if (first > 0 && last > 0) above += interval;
       else if (first > 0 && last <= 0) above += interval * first / (first - last);
       else if (first <= 0 && last > 0) above += interval * last / (last - first);
@@ -797,13 +1532,56 @@ function updateVisibility(params) {
     duration.textContent = hours < 1
       ? Math.round(above / 60_000) + ' min'
       : hours.toFixed(1) + ' hr';
+    return percentage;
   };
-  updateTargetVisibility('Sun', 'sun', result.sun.rows, sunVisibilityPie, sunVisibilityValue, sunVisibilityDuration);
-  updateTargetVisibility('Earth', 'earth', result.earth.rows, earthVisibilityPie, earthVisibilityValue, earthVisibilityDuration);
+  const sites = [{
+    label: 'Site A',
+    result,
+    sun: [sunVisibilityPie, sunVisibilityValue, sunVisibilityDuration],
+    earth: [earthVisibilityPie, earthVisibilityValue, earthVisibilityDuration]
+  }];
+  if (comparisonResult) {
+    sites.push({
+      label: 'Site B',
+      result: comparisonResult,
+      sun: [compareSunVisibilityPie, compareSunVisibilityValue, compareSunVisibilityDuration],
+      earth: [compareEarthVisibilityPie, compareEarthVisibilityValue, compareEarthVisibilityDuration]
+    });
+  }
+  for (const site of sites) {
+    site.sunPercent = updateTargetVisibility(site.label + ' Sun', 'sun', site.result.sun.rows, ...site.sun, site.result);
+    site.earthPercent = updateTargetVisibility(site.label + ' Earth', 'earth', site.result.earth.rows, ...site.earth, site.result);
+    site.score = (site.sunPercent + site.earthPercent) / 2;
+  }
+  return sites;
 }
 
-function targetStats(target, params) {
-  const rows = result[target].rows;
+function renderSiteRecommendation(sites) {
+  siteRecommendation.hidden = !comparisonResult;
+  if (!comparisonResult) return;
+
+  if (sites.some(site => !Array.isArray(site.result.terrain?.horizons) || !site.result.terrain.horizons.length)) {
+    recommendationTitle.textContent = 'Recommendation unavailable';
+    recommendationDetails.textContent = 'Terrain data is missing for at least one site, so terrain-based Sun and Earth visibility cannot be compared reliably.';
+    return;
+  }
+
+  const [siteA, siteB] = sites;
+  const scoreA = Math.round(siteA.score * 10) / 10;
+  const scoreB = Math.round(siteB.score * 10) / 10;
+  recommendationTitle.textContent = scoreA === scoreB
+    ? 'No clear preference — the sites are tied'
+    : 'Recommendation: ' + (scoreA > scoreB ? 'Site A' : 'Site B');
+  recommendationDetails.textContent =
+    'Equal-weight visibility score (average time above local terrain): Site A ' + scoreA.toFixed(1) +
+    '% (Sun ' + siteA.sunPercent.toFixed(1) + '%, Earth ' + siteA.earthPercent.toFixed(1) +
+    '%); Site B ' + scoreB.toFixed(1) + '% (Sun ' + siteB.sunPercent.toFixed(1) +
+    '%, Earth ' + siteB.earthPercent.toFixed(1) +
+    '%). This compares Sun and Earth visibility equally and does not assess other landing risks.';
+}
+
+function targetStats(target, params, siteResult = result) {
+  const rows = siteResult[target].rows;
   const start = Date.parse(params.get('start') + ':00Z');
   const stop = Date.parse(params.get('stop') + ':00Z');
   const times = [start, ...rows.map(row => Date.parse(row.time)).filter(time => time > start && time < stop), stop];
@@ -812,8 +1590,8 @@ function targetStats(target, params) {
   let maximum = -90;
   for (let index = 1; index < times.length; index += 1) {
     const interval = times[index] - times[index - 1];
-    const first = elevationAt(times[index - 1], rows) - terrainHorizonAt(times[index - 1], target);
-    const last = elevationAt(times[index], rows) - terrainHorizonAt(times[index], target);
+    const first = elevationAt(times[index - 1], rows) - terrainHorizonAt(times[index - 1], target, siteResult);
+    const last = elevationAt(times[index], rows) - terrainHorizonAt(times[index], target, siteResult);
     maximum = Math.max(maximum, elevationAt(times[index - 1], rows), elevationAt(times[index], rows));
     if (first > 0 && last > 0) above += interval;
     else if (first > 0 && last <= 0) above += interval * first / (first - last);
@@ -825,7 +1603,9 @@ function targetStats(target, params) {
 }
 
 function updateAssessment(params) {
-  const stats = { sun: targetStats('sun', params), earth: targetStats('earth', params) };
+  const siteResult = assessmentSite === 'b' && comparisonResult ? comparisonResult : result;
+  const siteParams = assessmentSite === 'b' && comparisonParams ? comparisonParams : params;
+  const stats = { sun: targetStats('sun', siteParams, siteResult), earth: targetStats('earth', siteParams, siteResult) };
   for (const target of ['sun', 'earth']) {
     const current = assessment[target];
     const targetStatsValue = stats[target];
@@ -848,6 +1628,36 @@ function updateAssessment(params) {
         : 'Both power and communication windows are limited by the terrain horizon.';
 }
 
+function openAssessmentModal() {
+  if (!assessmentSection || !assessmentModal || !assessmentModalBody) return;
+  assessmentModal.hidden = false;
+  assessmentClose.focus();
+}
+
+function closeAssessmentModal() {
+  if (!assessmentModal) return;
+  assessmentModal.hidden = true;
+}
+
+assessmentLaunch.addEventListener('click', openAssessmentModal);
+function setAssessmentSite(site) {
+  assessmentSite = site;
+  assessmentSiteA.classList.toggle('is-active', site === 'a');
+  assessmentSiteB.classList.toggle('is-active', site === 'b');
+  assessmentSiteA.setAttribute('aria-pressed', String(site === 'a'));
+  assessmentSiteB.setAttribute('aria-pressed', String(site === 'b'));
+  updateAssessment(site === 'b' ? comparisonParams : resultParams);
+}
+assessmentSiteA.addEventListener('click', () => setAssessmentSite('a'));
+assessmentSiteB.addEventListener('click', () => setAssessmentSite('b'));
+assessmentClose.addEventListener('click', closeAssessmentModal);
+assessmentModal.addEventListener('click', event => {
+  if (event.target === assessmentModal) closeAssessmentModal();
+});
+window.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && !assessmentModal.hidden) closeAssessmentModal();
+});
+
 function updateCurrentReading() {
   currentIndex = Number(slider.value);
   const { time, sun, earth } = result.rows[currentIndex];
@@ -866,8 +1676,32 @@ function updateCurrentReading() {
     selectedTargetLabel.className = 'sun-color';
     selectedReading.textContent = 'Click a marker to zoom';
   }
-  slider.setAttribute('aria-valuetext', timeLabel + ', click a target marker to inspect its terrain horizon');
-  canvas.setAttribute('aria-label', 'At ' + timeLabel + ', Sun and Earth azimuth and elevation against the lunar terrain horizon.');
+  let accessibleReadings = timeLabel + ', Site A Sun azimuth ' + sun.azimuth.toFixed(1) +
+    ' degrees, elevation ' + sun.elevation.toFixed(1) + ' degrees; Earth azimuth ' +
+    earth.azimuth.toFixed(1) + ' degrees, elevation ' + earth.elevation.toFixed(1) + ' degrees';
+  let chartDescription = 'At ' + timeLabel + ', Site A Sun azimuth ' + sun.azimuth.toFixed(1) +
+    ' degrees and elevation ' + sun.elevation.toFixed(1) + ' degrees; Earth azimuth ' +
+    earth.azimuth.toFixed(1) + ' degrees and elevation ' + earth.elevation.toFixed(1) + ' degrees.';
+  if (comparisonResult) {
+    const comparison = comparisonResult.rows[currentIndex];
+    const formatDifference = value => (value > 0 ? '+' : '') + value.toFixed(1) + '°';
+    const sunAzimuthDifference = ((comparison.sun.azimuth - sun.azimuth + 540) % 360) - 180;
+    const earthAzimuthDifference = ((comparison.earth.azimuth - earth.azimuth + 540) % 360) - 180;
+    compareSunReading.textContent = comparison.sun.azimuth.toFixed(1) + '° az · ' + comparison.sun.elevation.toFixed(1) + '° el';
+    compareEarthReading.textContent = comparison.earth.azimuth.toFixed(1) + '° az · ' + comparison.earth.elevation.toFixed(1) + '° el';
+    compareSunDifference.textContent = 'Δ vs A: ' + formatDifference(sunAzimuthDifference) + ' az · ' +
+      formatDifference(comparison.sun.elevation - sun.elevation) + ' el';
+    compareEarthDifference.textContent = 'Δ vs A: ' + formatDifference(earthAzimuthDifference) + ' az · ' +
+      formatDifference(comparison.earth.elevation - earth.elevation) + ' el';
+    accessibleReadings += '; Site B Sun azimuth ' + comparison.sun.azimuth.toFixed(1) +
+      ' degrees, elevation ' + comparison.sun.elevation.toFixed(1) + ' degrees; Earth azimuth ' +
+      comparison.earth.azimuth.toFixed(1) + ' degrees, elevation ' + comparison.earth.elevation.toFixed(1) + ' degrees';
+    chartDescription += ' Site B Sun azimuth ' + comparison.sun.azimuth.toFixed(1) +
+      ' degrees and elevation ' + comparison.sun.elevation.toFixed(1) + ' degrees; Earth azimuth ' +
+      comparison.earth.azimuth.toFixed(1) + ' degrees and elevation ' + comparison.earth.elevation.toFixed(1) + ' degrees.';
+  }
+  slider.setAttribute('aria-valuetext', accessibleReadings);
+  canvas.setAttribute('aria-label', chartDescription);
   drawChart();
 }
 
@@ -910,18 +1744,39 @@ function startPlayback() {
   }, 250);
 }
 
-function renderResult(payload, params) {
+function renderResult(payload, params, comparison, comparisonParamsInput) {
   stopPlayback();
   result = payload;
+  comparisonResult = comparison;
+  resultParams = params;
+  comparisonParams = comparisonParamsInput;
+  tableDetails.hidden = true;
+  tableToggle.setAttribute('aria-expanded', 'false');
+  tableToggle.firstElementChild.textContent = 'View additional topographical information';
+  tableToggle.lastElementChild.textContent = '+';
+  assessmentSiteB.disabled = !comparisonResult;
+  setAssessmentSite('a');
   page = 0;
   currentIndex = 0;
   slider.max = String(result.rows.length - 1);
   slider.value = '0';
   const site = params.get('latitude') + '°, ' + params.get('longitude') + '° E';
-  summary.textContent = 'Sun + Earth · ' + site + ' · ' + result.rows.length + ' samples';
+  const comparisonSite = comparisonParamsInput
+    ? comparisonParamsInput.get('latitude') + '°, ' + comparisonParamsInput.get('longitude') + '° E'
+    : '';
+  summary.textContent = 'Sun + Earth · Site A ' + site +
+    (comparisonResult ? ' · Site B ' + comparisonSite : '') + ' · ' + result.rows.length + ' samples';
   empty.hidden = true;
   data.hidden = false;
-  status.textContent = 'Loaded Sun and Earth ephemerides for ' + result.rows.length + ' matching time samples.';
+  comparisonReadings.hidden = !comparisonResult;
+  comparisonVisibility.hidden = !comparisonResult;
+  siteBKey.hidden = !comparisonResult;
+  if (comparisonResult) {
+    comparisonSiteLabel.textContent = 'Site B · ' + comparisonSite;
+  }
+  for (const header of comparisonTableHeaders) header.hidden = !comparisonResult;
+  status.textContent = 'Loaded Sun and Earth ephemerides for ' + result.rows.length +
+    ' matching time samples' + (comparisonResult ? ' at both sites.' : '.');
   terrainStatus.textContent = result.terrainPending
     ? 'Terrain horizon: loading Moon Trek elevation data…'
     : result.terrain?.horizons
@@ -929,9 +1784,12 @@ function renderResult(payload, params) {
     : 'Terrain profile unavailable: ' + (result.terrainError ?? 'Moon Trek did not return elevation data.') +
       ' Increase the observation step size and try again.';
   download.disabled = false;
+  assessmentLaunch.disabled = false;
   updateAssessment(params);
+  openAssessmentModal();
   renderTable();
-  updateVisibility(params);
+  const siteVisibility = updateVisibility(params);
+  renderSiteRecommendation(siteVisibility);
   updateCurrentReading();
   if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) startPlayback();
 }
@@ -945,14 +1803,48 @@ async function fetchTarget(params, target) {
   return payload;
 }
 
+async function fetchSiteResults(params, label) {
+  status.textContent = 'Requesting ' + label + ' Sun ephemeris from JPL Horizons…';
+  const sun = await fetchTarget(params, 'sun');
+  status.textContent = label + ' Sun data stored. Requesting Earth ephemeris from JPL Horizons…';
+  const earth = await fetchTarget(params, 'earth');
+  const combined = combineResults(sun, earth);
+  status.textContent = 'Loading ' + label + ' terrain profile…';
+  const terrainParams = new URLSearchParams({
+    latitude: params.get('latitude'), longitude: params.get('longitude'), altitude: params.get('altitude')
+  });
+  const terrainResponse = await fetch('/api/terrain?' + terrainParams);
+  const terrainPayload = await terrainResponse.json();
+  if (terrainResponse.ok) combined.terrain = terrainPayload;
+  else combined.terrainError = terrainPayload.error ?? 'Moon Trek did not return elevation data.';
+  return combined;
+}
+
+function assertMatchingSamples(first, second) {
+  if (first.rows.length !== second.rows.length ||
+      first.rows.some((row, index) => row.time !== second.rows[index].time)) {
+    throw new Error('The two sites returned different time samples. Try the comparison again.');
+  }
+}
+
 form.addEventListener('submit', async event => {
   event.preventDefault();
   stopPlayback();
   const params = new URLSearchParams(new FormData(form));
+  const comparisonParams = compareEnabled.checked ? new URLSearchParams(params) : undefined;
+  for (const key of ['compareEnabled', 'compareLatitude', 'compareLongitude']) {
+    params.delete(key);
+    comparisonParams?.delete(key);
+  }
+  if (comparisonParams) {
+    comparisonParams.set('latitude', compareLatitudeInput.value);
+    comparisonParams.set('longitude', compareLongitudeInput.value);
+  }
+  comparisonResult = undefined;
   run.disabled = true;
-  run.firstElementChild.textContent = 'Running observation…';
+  run.firstElementChild.textContent = comparisonParams ? 'Comparing sites…' : 'Running observation…';
   status.classList.remove('error');
-  status.textContent = 'Requesting Sun ephemeris from JPL Horizons…';
+  status.textContent = 'Preparing observation…';
   status.hidden = false;
   empty.hidden = true;
   data.hidden = true;
@@ -964,7 +1856,6 @@ form.addEventListener('submit', async event => {
     const earth = await fetchTarget(params, 'earth');
     const combined = combineResults(sun, earth);
     combined.terrainPending = true;
-    renderResult(combined, params);
     status.textContent = 'Ephemeris loaded. Loading Moon Trek terrain horizon…';
     const terrainParams = new URLSearchParams({
       latitude: params.get('latitude'), longitude: params.get('longitude'), altitude: params.get('altitude'),
@@ -974,7 +1865,13 @@ form.addEventListener('submit', async event => {
     if (terrainResponse.ok) combined.terrain = terrainPayload;
     else combined.terrainError = terrainPayload.error ?? 'Moon Trek did not return elevation data.';
     combined.terrainPending = false;
-    renderResult(combined, params);
+    renderResult(combined, params, undefined, undefined);
+    let comparison;
+    if (comparisonParams) {
+      comparison = await fetchSiteResults(comparisonParams, 'Site B');
+      assertMatchingSamples(combined, comparison);
+    }
+    renderResult(combined, params, comparison, comparisonParams);
   } catch (error) {
     status.textContent = error instanceof SyntaxError ? 'The service returned an unexpected response.' : error.message;
     status.classList.add('error');
@@ -984,12 +1881,30 @@ form.addEventListener('submit', async event => {
   }
 });
 
+function updateComparisonFields() {
+  const enabled = compareEnabled.checked;
+  compareCoordinates.hidden = !enabled;
+  compareLatitudeInput.disabled = !enabled;
+  compareLongitudeInput.disabled = !enabled;
+}
+compareEnabled.addEventListener('change', updateComparisonFields);
+updateComparisonFields();
+
 playback.addEventListener('click', () => {
   if (playbackTimer) stopPlayback();
   else startPlayback();
 });
 previous.addEventListener('click', () => { page -= 1; renderTable(); });
 next.addEventListener('click', () => { page += 1; renderTable(); });
+tableToggle.addEventListener('click', () => {
+  const isVisible = !tableDetails.hidden;
+  tableDetails.hidden = isVisible;
+  tableToggle.setAttribute('aria-expanded', String(!isVisible));
+  tableToggle.firstElementChild.textContent = isVisible
+    ? 'View additional topographical information'
+    : 'Hide additional topographical information';
+  tableToggle.lastElementChild.textContent = isVisible ? '+' : '−';
+});
 slider.addEventListener('input', () => {
   stopPlayback();
   updateCurrentReading();
@@ -998,17 +1913,37 @@ download.addEventListener('click', () => {
   const rows = result.rows.map(({ time, sun, earth }, index) => {
     const sunTerrain = result.terrain ? terrainAtAzimuth(result.terrain.horizons, sun.azimuth) : undefined;
     const earthTerrain = result.terrain ? terrainAtAzimuth(result.terrain.horizons, earth.azimuth) : undefined;
-    return [time, sun.azimuth, sun.elevation,
+    const values = [time, sun.azimuth, sun.elevation,
       sunTerrain?.horizonElevation ?? '', sunTerrain ? sun.elevation >= 0 && sun.elevation <= sunTerrain.horizonElevation : '',
       earth.azimuth, earth.elevation,
-      earthTerrain?.horizonElevation ?? '', earthTerrain ? earth.elevation >= 0 && earth.elevation <= earthTerrain.horizonElevation : ''].join(',');
+      earthTerrain?.horizonElevation ?? '', earthTerrain ? earth.elevation >= 0 && earth.elevation <= earthTerrain.horizonElevation : ''];
+    if (comparisonResult) {
+      const { sun: compareSun, earth: compareEarth } = comparisonResult.rows[index];
+      const compareSunTerrain = comparisonResult.terrain
+        ? terrainAtAzimuth(comparisonResult.terrain.horizons, compareSun.azimuth) : undefined;
+      const compareEarthTerrain = comparisonResult.terrain
+        ? terrainAtAzimuth(comparisonResult.terrain.horizons, compareEarth.azimuth) : undefined;
+      values.push(compareSun.azimuth, compareSun.elevation,
+        compareSunTerrain?.horizonElevation ?? '',
+        compareSunTerrain ? compareSun.elevation >= 0 && compareSun.elevation <= compareSunTerrain.horizonElevation : '',
+        compareEarth.azimuth, compareEarth.elevation,
+        compareEarthTerrain?.horizonElevation ?? '',
+        compareEarthTerrain ? compareEarth.elevation >= 0 && compareEarth.elevation <= compareEarthTerrain.horizonElevation : '');
+    }
+    return values.join(',');
   });
-  const csv = ['timestamp_utc,sun_azimuth_deg,sun_elevation_deg,sun_terrain_horizon_deg,sun_terrain_blocked,earth_azimuth_deg,earth_elevation_deg,earth_terrain_horizon_deg,earth_terrain_blocked',
+  const headers = [comparisonResult
+    ? 'timestamp_utc,site_a_sun_azimuth_deg,site_a_sun_elevation_deg,site_a_sun_terrain_horizon_deg,site_a_sun_terrain_blocked,site_a_earth_azimuth_deg,site_a_earth_elevation_deg,site_a_earth_terrain_horizon_deg,site_a_earth_terrain_blocked'
+    : 'timestamp_utc,sun_azimuth_deg,sun_elevation_deg,sun_terrain_horizon_deg,sun_terrain_blocked,earth_azimuth_deg,earth_elevation_deg,earth_terrain_horizon_deg,earth_terrain_blocked'];
+  if (comparisonResult) {
+    headers.push('site_b_sun_azimuth_deg,site_b_sun_elevation_deg,site_b_sun_terrain_horizon_deg,site_b_sun_terrain_blocked,site_b_earth_azimuth_deg,site_b_earth_elevation_deg,site_b_earth_terrain_horizon_deg,site_b_earth_terrain_blocked');
+  }
+  const csv = [headers.join(','),
     ...rows].join('\n') + '\n';
   const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
   const link = document.createElement('a');
   link.href = url;
-  link.download = 'moonwalkers-ephemeris.csv';
+  link.download = comparisonResult ? 'moonwalkers-ephemeris-comparison.csv' : 'moonwalkers-ephemeris.csv';
   document.body.append(link);
   link.click();
   link.remove();

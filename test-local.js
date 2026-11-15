@@ -18,6 +18,7 @@ const mime = {
 
 const { default: horizonsHandler } = await import(pathToFileURL(path.join(root, 'api', 'horizons.js')).href);
 const { default: terrainHandler } = await import(pathToFileURL(path.join(root, 'api', 'terrain.js')).href);
+const { default: lolaHandler } = await import(pathToFileURL(path.join(root, 'api', 'lola.js')).href);
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
@@ -34,6 +35,15 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname.startsWith('/api/terrain')) {
     const request = new Request('http://localhost' + req.url, { method: req.method, headers: req.headers });
     const response = await terrainHandler.fetch(request);
+    const body = Buffer.from(await response.arrayBuffer());
+    res.writeHead(response.status, Object.fromEntries(response.headers.entries()));
+    res.end(body);
+    return;
+  }
+
+  if (url.pathname.startsWith('/api/lola')) {
+    const request = new Request('http://localhost' + req.url, { method: req.method, headers: req.headers });
+    const response = await lolaHandler.fetch(request);
     const body = Buffer.from(await response.arrayBuffer());
     res.writeHead(response.status, Object.fromEntries(response.headers.entries()));
     res.end(body);
