@@ -85,7 +85,7 @@ h1 span { color: var(--accent); }
 .lola-panel { display: grid; grid-template-columns: minmax(0, 1fr) 230px; gap: 14px; align-items: center; padding: 12px 24px; border-top: 1px solid var(--edge); background: color-mix(in oklab, var(--panel), var(--input) 36%); }
 .lola-panel h3 { font-size: .9rem; font-weight: 600; }
 #lola-status { margin-top: 4px; color: var(--muted); font: .71rem/1.4 var(--mono); }
-.dataset-stats { margin-top: 6px; color: #c2c6cf; font: .7rem/1.52 var(--mono); white-space: pre-line; }
+.dataset-stats { margin-top: 6px; color: var(--muted); font: .67rem/1.35 var(--mono); }
 .lola-tile-view { width: 100%; max-width: 230px; display: grid; gap: 8px; justify-items: center; }
 #lola-preview, #lola-spot-preview { width: 100%; max-width: 230px; aspect-ratio: 1; border-radius: 8px; border: 1px solid var(--edge); object-fit: cover; background: #0f1012; }
 .lola-tile-nav { width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; font: .66rem var(--mono); color: var(--muted); }

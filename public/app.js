@@ -477,27 +477,25 @@ function updateLolaDem(latitude, longitudeEast) {
         '°, Lon ' + longitudeEast.toFixed(3) + '° E.';
 
       if (stats && local) {
-        quantStats.textContent =
-          'Site elevation: ' + payload.elevationMeters.toFixed(1) + ' m\n' +
-          'Min/Max: ' + stats.minMeters.toFixed(1) + ' / ' + stats.maxMeters.toFixed(1) + ' m\n' +
-          'Mean/Median: ' + stats.meanMeters.toFixed(1) + ' / ' + stats.medianMeters.toFixed(1) + ' m\n' +
-          'Std dev: ' + stats.stdDevMeters.toFixed(2) + ' m\n' +
-          'Slope (avg/max): ' + local.slopeMeanDeg.toFixed(2) + '° / ' + local.slopeMaxDeg.toFixed(2) + '°';
+        quantStats.textContent = 'Site ' + payload.elevationMeters.toFixed(1) + ' m · min/max ' +
+          stats.minMeters.toFixed(1) + '/' + stats.maxMeters.toFixed(1) + ' m · mean/median ' +
+          stats.meanMeters.toFixed(1) + '/' + stats.medianMeters.toFixed(1) + ' m · std dev ' +
+          stats.stdDevMeters.toFixed(2) + ' m · slope(avg/max) ' +
+          local.slopeMeanDeg.toFixed(2) + '°/' + local.slopeMaxDeg.toFixed(2) + '°';
       } else {
         quantStats.textContent = 'Site ' + payload.elevationMeters.toFixed(1) +
           ' m · detailed topography metrics unavailable for this request.';
       }
 
       if (aspect && roughness && curvature && hazard) {
-        demDetails.textContent =
-          'Aspect (downslope): ' + aspect.downslopeAzimuthDeg.toFixed(1) + '°\n' +
-          'Roughness RMS / TRI: ' + roughness.rmsMeters.toFixed(2) + ' / ' + roughness.triMeters.toFixed(2) + ' m\n' +
-          'Moving roughness std: ' + roughness.movingWindowStdDevMeters.toFixed(2) + ' m\n' +
-          'Curvature (profile/plan/total): ' + curvature.profileMeanPerMeter.toExponential(2) + ' / ' +
-          curvature.planMeanPerMeter.toExponential(2) + ' / ' + curvature.totalPerMeter.toExponential(2) + '\n' +
-          'Local relief: ' + hazard.localReliefMeters.toFixed(1) + ' m\n' +
-          'Slope > 10°: ' + (hazard.slopeExceedanceFractions.over10Deg * 100).toFixed(1) + '%\n' +
-          'Open sky: ' + (hazard.horizonExposure.openSkyFraction * 100).toFixed(1) + '%';
+        demDetails.textContent = 'Aspect: ' + aspect.downslopeAzimuthDeg.toFixed(1) + '° · RMS roughness: ' +
+          roughness.rmsMeters.toFixed(2) + ' m · TRI: ' + roughness.triMeters.toFixed(2) +
+          ' m · moving roughness std: ' + roughness.movingWindowStdDevMeters.toFixed(2) +
+          ' m · curvature (profile/plan/total): ' + curvature.profileMeanPerMeter.toExponential(2) + '/' +
+          curvature.planMeanPerMeter.toExponential(2) + '/' + curvature.totalPerMeter.toExponential(2) +
+          ' · local relief: ' + hazard.localReliefMeters.toFixed(1) + ' m · slope>10°: ' +
+          (hazard.slopeExceedanceFractions.over10Deg * 100).toFixed(1) + '% · open sky: ' +
+          (hazard.horizonExposure.openSkyFraction * 100).toFixed(1) + '%';
       } else {
         demDetails.textContent = 'Aspect, roughness, curvature, and hazard indicators are unavailable for this request.';
       }
