@@ -1,0 +1,77 @@
+name: Deploy dev preview
+
+on:
+  push:
+    branches: [dev]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: moonwalkers9-dev-preview
+  cancel-in-progress: true
+
+env:
+  VERCEL_ORG_ID: team_IipLFmC1bGRK1ExFUNgRDfJI
+  VERCEL_PROJECT_ID: prj_eus0Mp8BJk83etPMpqunUzFgqSvk
+  VERCEL_SCOPE: chibuikeods-projects
+  PREVIEW_DOMAIN: moonwalkers9-dev.vercel.app
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: dev-preview
+      url: https://moonwalkers9-dev.vercel.app
+    steps:
+      - name: Check deployment credentials
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          if [[ -z "$VERCEL_TOKEN" ]]; then
+            echo "::error::Add VERCEL_TOKEN as a GitHub Actions secret for this repository or the dev-preview environment."
+            exit 1
+          fi
+
+      - name: Check out dev
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@52.2.0
+
+      - name: Pull Vercel preview settings
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: vercel pull --yes --environment=preview --git-branch=dev --scope "$VERCEL_SCOPE"
+
+      - name: Build preview
+        run: vercel build
+
+      - name: Deploy preview and update testing URL
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          set -euo pipefail
+          deployment="$(vercel deploy --prebuilt --target=preview --scope "$VERCEL_SCOPE" --yes --non-interactive --format=json --meta "githubCommitRef=dev" --meta "githubCommitSha=$GITHUB_SHA")"
+          deployment_url="$(node -e '
+            const result = JSON.parse(require("fs").readFileSync(0, "utf8"));
+            const deployment = result.deployment ?? result;
+            if (deployment.readyState !== "READY" || ![null, "preview"].includes(deployment.target)) {
+              throw new Error(`Expected a ready preview deployment. Got state ${deployment.readyState} and target ${deployment.target}.`);
+            }
+            const url = new URL(deployment.url);
+            if (url.protocol !== "https:" || url.origin !== deployment.url || !url.hostname.endsWith(".vercel.app")) {
+              throw new Error("Unexpected deployment URL");
+            }
+            console.log(url.origin);
+          ' <<< "$deployment")"
+          vercel alias set "$deployment_url" "$PREVIEW_DOMAIN" --scope "$VERCEL_SCOPE"
+          printf 'Dev preview: https://%s\n' "$PREVIEW_DOMAIN" >> "$GITHUB_STEP_SUMMARY"
