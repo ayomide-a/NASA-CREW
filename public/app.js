@@ -67,7 +67,6 @@ const regionOptions = document.querySelector('#region-options');
 const regionStatus = document.querySelector('#region-status');
 const regionPopupElement = document.querySelector('#region-popup');
 const regionPopupName = document.querySelector('#region-popup-name');
-const closeRegionPopup = document.querySelector('#close-region-popup');
 const regionAboutPanel = document.querySelector('#region-about-panel');
 const regionAboutTitle = document.querySelector('#region-about-title');
 const regionAboutDescription = document.querySelector('#region-about-description');
@@ -325,8 +324,6 @@ function showRegionPopup(index, coordinate) {
   regionPopupElement.hidden = false;
   regionPopupOverlay.setPosition(coordinate);
 }
-
-closeRegionPopup.addEventListener('click', hideRegionPopup);
 
 function hideRegionAbout() {
   activeAboutRegionIndex = undefined;

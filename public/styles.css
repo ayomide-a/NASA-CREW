@@ -80,9 +80,8 @@ h1 span { color: var(--accent); }
 .poi-status.error { color: #ffad9b; }
 #map-coordinates { flex: 0 0 auto; padding: 9px 12px; border: 1px solid var(--edge); border-radius: 7px; color: var(--accent); background: var(--input); font: .78rem var(--mono); }
 #map { width: 100%; height: clamp(540px, 76vh, 880px); background: radial-gradient(ellipse at center, #282727, #111315 75%); }
-.region-popup { display: flex; align-items: center; gap: 12px; max-width: min(320px, calc(100vw - 32px)); padding: 9px 11px; border: 1px solid var(--edge); border-radius: 7px; color: var(--ink); background: var(--panel); box-shadow: 0 8px 24px rgb(0 0 0 / 45%); font-size: .78rem; }
+.region-popup { max-width: min(320px, calc(100vw - 32px)); padding: 9px 11px; border: 1px solid var(--edge); border-radius: 7px; color: var(--ink); background: var(--panel); box-shadow: 0 8px 24px rgb(0 0 0 / 45%); font-size: .78rem; }
 .region-popup[hidden] { display: none; }
-.region-popup button { flex: 0 0 auto; min-width: 0; min-height: 0; padding: 4px 7px; border: 1px solid var(--edge); border-radius: 5px; color: var(--muted); background: var(--input); font-size: .68rem; }
 .lola-panel { display: grid; grid-template-columns: minmax(0, 1fr) 230px; gap: 14px; align-items: center; padding: 12px 24px; border-top: 1px solid var(--edge); background: color-mix(in oklab, var(--panel), var(--input) 36%); }
 .lola-panel h3 { font-size: .9rem; font-weight: 600; }
 #lola-status { margin-top: 4px; color: var(--muted); font: .71rem/1.4 var(--mono); }

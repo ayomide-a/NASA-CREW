@@ -11,7 +11,7 @@
         "id": "mare-tranquillitatis",
         "name": "Mare Tranquillitatis (Sea of Tranquility)",
         "group": "Lunar maria",
-        "description": "The Apollo 11 landing site is within Mare Tranquillitatis. NASA's Lunar Reconnaissance Orbiter later imaged the descent stage and astronaut foot trails, preserving a record of the first crewed Moon landing.",
+        "description": "Apollo 11 landed here on July 20, 1969, completing the first crewed landing on the Moon.",
         "descriptionSource": "https://science.nasa.gov/resource/apollo-11-landing-site/"
       },
       "geometry": {
@@ -25,8 +25,8 @@
         "id": "mare-serenitatis",
         "name": "Mare Serenitatis (Sea of Serenity)",
         "group": "Lunar maria",
-        "description": "NASA studies lunar plains and cooled-lava features to understand the Moon's past volcanism and how rocky worlds formed and changed.",
-        "descriptionSource": "https://science.nasa.gov/moon/lunar-volcanism/"
+        "description": "Luna 21 landed near Mare Serenitatis in 1973 and deployed Lunokhod 2, the Soviet Union's second lunar rover.",
+        "descriptionSource": "https://www.lpi.usra.edu/lunar/missions/luna/"
       },
       "geometry": {
         "type": "Polygon",
@@ -39,8 +39,8 @@
         "id": "mare-imbrium",
         "name": "Mare Imbrium (Sea of Rains)",
         "group": "Lunar maria",
-        "description": "NASA studies lunar plains and cooled-lava features to understand the Moon's past volcanism and how rocky worlds formed and changed.",
-        "descriptionSource": "https://science.nasa.gov/moon/lunar-volcanism/"
+        "description": "Luna 17 landed here in 1970 and deployed Lunokhod 1, the first rover to explore the lunar surface.",
+        "descriptionSource": "https://www.lpi.usra.edu/lunar/missions/luna/"
       },
       "geometry": {
         "type": "Polygon",
@@ -53,8 +53,8 @@
         "id": "mare-crisium",
         "name": "Mare Crisium (Sea of Crises)",
         "group": "Lunar maria",
-        "description": "NASA describes Mare Crisium as a basaltic plain filling an ancient impact basin. Its 2.5-3.3-billion-year-old basalts and wrinkle ridges help scientists investigate ancient volcanism and surface compression.",
-        "descriptionSource": "https://science.nasa.gov/resource/wrinkle-ridge-in-mare-crisium/"
+        "description": "Luna 24 landed here in 1976 and returned lunar soil samples to Earth.",
+        "descriptionSource": "https://www.lpi.usra.edu/lunar/missions/luna/"
       },
       "geometry": {
         "type": "Polygon",
@@ -67,12 +67,12 @@
         "id": "oceanus-procellarum",
         "name": "Oceanus Procellarum (Ocean of Storms)",
         "group": "Lunar maria",
-        "description": "NASA studies lunar plains and cooled-lava features to understand the Moon's past volcanism and how rocky worlds formed and changed.",
-        "descriptionSource": "https://science.nasa.gov/moon/lunar-volcanism/"
+        "description": "Apollo 12 landed here in 1969. Its crew set up surface experiments and returned lunar samples to Earth.",
+        "descriptionSource": "https://science.nasa.gov/photojournal/apollo-12-second-look-midday-on-the-ocean-of-storms/"
       },
       "geometry": {
         "type": "Polygon",
-        "coordinates": [[[-81, 57], [-75, 55], [-69, 52], [-64, 48], [-60, 45], [-54, 43], [-48, 41], [-43, 39], [-41, 36], [-41, 28], [-41, 20], [-40, 12], [-39, 4], [-36, -2], [-33, -7], [-30, -11], [-27, -13], [-29, -16.2], [-30.5, -15.2], [-34, -15], [-46, -13], [-54, -11], [-63, -9], [-70, -5], [-75, 3], [-79, 15], [-81, 28], [-81, 42], [-81, 57]]]
+        "coordinates": [[[-81, 57], [-75, 55], [-69, 52], [-64, 48], [-60, 45], [-54, 43], [-48, 41], [-43, 39], [-41, 36], [-41, 28], [-41, 20], [-40, 12], [-39, 4], [-36, -1], [-32, 1], [-28, 1], [-24, 0], [-22, -2.5], [-22.5, -6], [-25, -10], [-27, -13], [-29, -16.2], [-30.5, -15.2], [-34, -15], [-46, -13], [-54, -11], [-63, -9], [-70, -5], [-75, 3], [-79, 15], [-81, 28], [-81, 42], [-81, 57]]]
       }
     },
     {
@@ -81,8 +81,8 @@
         "id": "mare-fecunditatis",
         "name": "Mare Fecunditatis (Sea of Fertility)",
         "group": "Lunar maria",
-        "description": "NASA studies lunar plains and cooled-lava features to understand the Moon's past volcanism and how rocky worlds formed and changed.",
-        "descriptionSource": "https://science.nasa.gov/moon/lunar-volcanism/"
+        "description": "Luna 16 landed here in 1970 and became the first robotic mission to return a sample from the Moon.",
+        "descriptionSource": "https://www.lpi.usra.edu/lunar/missions/luna/"
       },
       "geometry": {
         "type": "Polygon",
@@ -95,7 +95,7 @@
         "id": "mare-nubium",
         "name": "Mare Nubium (Sea of Clouds)",
         "group": "Lunar maria",
-        "description": "NASA studies lunar plains and cooled-lava features to understand the Moon's past volcanism and how rocky worlds formed and changed.",
+        "description": "Mare Nubium is a broad basalt plain formed when ancient lava flowed across low-lying lunar terrain.",
         "descriptionSource": "https://science.nasa.gov/moon/lunar-volcanism/"
       },
       "geometry": {
@@ -109,8 +109,8 @@
         "id": "mare-humorum",
         "name": "Mare Humorum (Sea of Moisture)",
         "group": "Lunar maria",
-        "description": "NASA studies lunar plains and cooled-lava features to understand the Moon's past volcanism and how rocky worlds formed and changed.",
-        "descriptionSource": "https://science.nasa.gov/moon/lunar-volcanism/"
+        "description": "A 28-meter-wide graben cuts through a pyroclastic deposit in southwestern Mare Humorum, a small example of fractured volcanic terrain.",
+        "descriptionSource": "https://science.nasa.gov/photojournal/graben-and-pyroclastics-in-sw-mare-humorum/"
       },
       "geometry": {
         "type": "Polygon",
@@ -123,8 +123,8 @@
         "id": "mare-nectaris",
         "name": "Mare Nectaris (Sea of Nectar)",
         "group": "Lunar maria",
-        "description": "NASA studies lunar plains and cooled-lava features to understand the Moon's past volcanism and how rocky worlds formed and changed.",
-        "descriptionSource": "https://science.nasa.gov/moon/lunar-volcanism/"
+        "description": "Mare Nectaris occupies part of an ancient impact basin. Its western edge meets the brighter anorthosite highlands of Montes Pyrenaeus.",
+        "descriptionSource": "https://science.nasa.gov/photojournal/montes-pyrenaeus-meets-mare-nectaris/"
       },
       "geometry": {
         "type": "Polygon",
@@ -137,7 +137,7 @@
         "id": "mare-frigoris",
         "name": "Mare Frigoris (Sea of Cold)",
         "group": "Lunar maria",
-        "description": "NASA studies lunar plains and cooled-lava features to understand the Moon's past volcanism and how rocky worlds formed and changed.",
+        "description": "Mare Frigoris is a broad, high-latitude plain on the Moon's near side, formed by ancient volcanic activity like the other maria.",
         "descriptionSource": "https://science.nasa.gov/moon/lunar-volcanism/"
       },
       "geometry": {
@@ -154,7 +154,7 @@
       },
       "geometry": {
         "type": "Polygon",
-        "coordinates": [[[79.74664, -88.19025], [82.34873, -87.53595], [97.67653, -87.5358], [100.50053, -88.39159], [79.74664, -88.19025]]]
+        "coordinates": [[[79.74664, -88.19025], [82.34873, -87.53595], [97.67653, -87.5358], [100.50053, -88.18991], [79.74664, -88.19025]]]
       }
     },
     {
@@ -178,7 +178,7 @@
       },
       "geometry": {
         "type": "Polygon",
-        "coordinates": [[[-101.89179, -89.3582], [-143.17117, -89.83356], [-171.29402, -89.33549], [-151.228783, -89.09113], [-101.89179, -89.3582]]]
+        "coordinates": [[[-101.89179, -89.3582], [-143.17117, -89.83356], [-171.29402, -89.33549], [-136.228783, -89.09113], [-101.89179, -89.3582]]]
       }
     },
     {
@@ -274,7 +274,7 @@
       },
       "geometry": {
         "type": "Polygon",
-        "coordinates": [[[35.65466, -85.35246], [38.05707, -84.97612], [43.21241, -85.47541], [36.47282, -85.89947], [35.65466, -85.35246]]]
+        "coordinates": [[[31.65466, -85.35246], [38.05707, -84.97612], [43.21241, -85.47541], [36.47282, -85.89947], [31.65466, -85.35246]]]
       }
     },
     {
