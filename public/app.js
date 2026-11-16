@@ -148,8 +148,9 @@ let pointsOfInterest = [];
 let globeSites = [];
 let globe;
 let globeInitialization;
-const globePresets = ['IM-2', 'IM-1', 'Chandrayaan-3', 'Apollo 11', 'Apollo 17', "Chang'e 4"];
 const globeSiteButtons = new Map();
+const visibleGlobePoiIndexes = new Set();
+let focusedGlobeSite;
 const selectedPoiIndexes = new Set();
 let regions = [];
 const selectedRegionIndexes = new Set();
@@ -648,44 +649,121 @@ function updateMarkerFromInputs() {
 }
 
 function highlightGlobeSite(site) {
-  for (const [preset, button] of globeSiteButtons) {
-    button.setAttribute('aria-pressed', String(site === preset));
-  }
   globe?.select(site);
 }
 
 function updateGlobeSelection() {
-  const preset = globeSites.find(site => site.latitude.toFixed(6) === latitudeInput.value &&
+  const site = globeSites.find(site => site.latitude.toFixed(6) === latitudeInput.value &&
     eastLongitude(site.longitude).toFixed(6) === longitudeInput.value);
-  highlightGlobeSite(preset);
+  highlightGlobeSite(site);
 }
 
 function chooseGlobeSite(site) {
+  const index = globeSites.indexOf(site);
+  if (index >= 0) visibleGlobePoiIndexes.add(index);
+  focusedGlobeSite = site;
+  updateGlobePins();
+  updateGlobeSiteButtons();
   updateSelectedSite(site.latitude, site.longitude);
   globe?.focus(site);
 }
 
-function renderGlobeSites() {
-  globeSites = globePresets.map(name => pointsOfInterest.find(site => site.mission === name)).filter(Boolean);
-  globeSiteButtons.clear();
-  for (const site of globeSites) {
-    const button = document.createElement('button');
-    button.type = 'button';
-    const title = document.createElement('strong');
-    title.textContent = site.mission;
-    const coords = document.createElement('small');
-    coords.textContent = Math.abs(site.latitude).toFixed(3) + '° ' + (site.latitude < 0 ? 'S' : 'N') +
-      ' · ' + Math.abs(site.longitude).toFixed(3) + '° ' + (site.longitude < 0 ? 'W' : 'E');
-    button.append(title, coords);
-    button.addEventListener('click', () => chooseGlobeSite(site));
-    globeSiteButtons.set(site, button);
-  }
-  if (!globeSites.length) {
-    globeList.textContent = 'No preset sites found.';
+function toggleGlobeSite(site) {
+  const index = globeSites.indexOf(site);
+  if (visibleGlobePoiIndexes.has(index) && focusedGlobeSite === site) {
+    visibleGlobePoiIndexes.delete(index);
+    const nextIndex = [...visibleGlobePoiIndexes].pop();
+    if (nextIndex === undefined) {
+      focusedGlobeSite = undefined;
+      updateGlobePins();
+      updateGlobeSiteButtons();
+      globe?.focus();
+    } else {
+      chooseGlobeSite(globeSites[nextIndex]);
+    }
     return;
   }
-  globeList.replaceChildren(...globeSiteButtons.values());
-  globe?.setSites(globeSites);
+  chooseGlobeSite(site);
+}
+
+function updateGlobePins() {
+  globe?.setSites([...visibleGlobePoiIndexes].map(index => pointsOfInterest[index]));
+}
+
+function updateGlobeSiteButtons() {
+  for (const [site, button] of globeSiteButtons) {
+    button.setAttribute('aria-pressed', String(visibleGlobePoiIndexes.has(globeSites.indexOf(site))));
+  }
+}
+
+function renderGlobeSites() {
+  globeSites = pointsOfInterest;
+  globeSiteButtons.clear();
+  if (!globeSites.length) {
+    globeList.textContent = 'No points of interest found.';
+    return;
+  }
+
+  const groups = new Map();
+  globeSites.forEach((site, index) => {
+    const program = poiProgram(site.mission);
+    if (!groups.has(program)) groups.set(program, []);
+    groups.get(program).push({ site, index });
+  });
+
+  const sections = [...groups].map(([program, sites]) => {
+    const group = document.createElement('section');
+    group.className = 'globe-program';
+
+    const heading = document.createElement('div');
+    heading.className = 'poi-program-heading';
+    const name = document.createElement('strong');
+    name.className = 'globe-program-name';
+    name.textContent = program;
+
+    const expander = document.createElement('button');
+    expander.type = 'button';
+    expander.className = 'poi-program-expander';
+    expander.setAttribute('aria-expanded', 'false');
+    expander.setAttribute('aria-label', 'Expand ' + program + ' missions');
+    expander.textContent = sites.length + (sites.length === 1 ? ' mission' : ' missions');
+
+    const items = document.createElement('div');
+    items.className = 'globe-program-items';
+    items.setAttribute('role', 'group');
+    items.setAttribute('aria-label', program + ' missions');
+    items.hidden = true;
+
+    expander.addEventListener('click', () => {
+      items.hidden = !items.hidden;
+      expander.setAttribute('aria-expanded', String(!items.hidden));
+      expander.setAttribute('aria-label',
+        (items.hidden ? 'Expand ' : 'Collapse ') + program + ' missions');
+    });
+
+    for (const { site, index } of sites) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'globe-site-button';
+      button.setAttribute('aria-pressed', String(visibleGlobePoiIndexes.has(index)));
+      const title = document.createElement('strong');
+      title.textContent = site.mission;
+      const coords = document.createElement('small');
+      coords.textContent = Math.abs(site.latitude).toFixed(3) + '° ' + (site.latitude < 0 ? 'S' : 'N') +
+        ' · ' + Math.abs(site.longitude).toFixed(3) + '° ' + (site.longitude < 0 ? 'W' : 'E');
+      button.append(title, coords);
+      button.addEventListener('click', () => toggleGlobeSite(site));
+      globeSiteButtons.set(site, button);
+      items.append(button);
+    }
+
+    heading.append(name, expander);
+    group.append(heading, items);
+    return group;
+  });
+  globeList.replaceChildren(...sections);
+  updateGlobePins();
+  updateGlobeSiteButtons();
   updateGlobeSelection();
 }
 
@@ -701,14 +779,14 @@ async function initializeGlobe() {
         updateSelectedSite(latitude, longitude);
       }
     });
-    globe.setSites(globeSites);
+    updateGlobePins();
     updateGlobeSelection();
     updateGlobeRegions();
     if (activeAboutRegionIndex !== undefined) focusGlobeRegions([activeAboutRegionIndex]);
     globeStatus.hidden = true;
     globeReset.disabled = false;
   } catch (error) {
-    globeStatus.textContent = 'The 3D globe couldn’t load. Choose a preset from the list or use the 2D map.';
+    globeStatus.textContent = 'The 3D globe couldn’t load. Choose a point of interest from the list or use the 2D map.';
     console.warn('Could not initialize the 3D Moon:', error);
   }
 }
@@ -721,7 +799,7 @@ function showSiteView(isGlobe) {
   for (const element of mapOnlyElements) element.hidden = isGlobe;
   (isGlobe ? globeStage : map2d).append(regionAboutPanel);
   mapInstructions.textContent = isGlobe ?
-    'Choose a preset site or use Lunar regions to highlight areas on the globe.' :
+    'Choose a point of interest or use Lunar regions to highlight areas on the globe.' :
     'Click the Moon to set Site A, then add a second site to compare.';
   if (isGlobe) globeInitialization ??= initializeGlobe();
   else lunarMap.updateSize();
@@ -1256,7 +1334,7 @@ async function loadPointsOfInterest() {
     const unavailable = document.createElement('p');
     unavailable.textContent = 'Site list unavailable. See the status below.';
     poiOptions.replaceChildren(unavailable);
-    globeList.textContent = 'The preset site list is unavailable. Enter coordinates in Observation setup.';
+    globeList.textContent = 'The points of interest list is unavailable. Enter coordinates in Observation setup.';
     poiStatus.classList.add('error');
     poiStatus.hidden = false;
     poiStatus.textContent = 'Could not load points of interest: ' + error.message;

@@ -125,17 +125,20 @@ h1 span { color: var(--accent); }
 .globe-sites { min-width: 0; border-left: 1px solid var(--edge); padding: 17px 15px; }
 .globe-sites h3 { font-size: .88rem; font-weight: 600; margin-bottom: 10px; }
 #globe-site-list { display: grid; gap: 6px; color: var(--muted); font-size: .8rem; }
-#globe-site-list button { min-height: 57px; display: grid; align-content: center; gap: 4px; background: var(--input); color: var(--ink); border: 1px solid var(--edge); border-radius: 6px; text-align: left; padding: 7px 9px; }
-#globe-site-list strong { font-size: .85rem; font-weight: 600; }
-#globe-site-list small { color: var(--muted); font: .69rem/1.4 var(--mono); }
-#globe-site-list button:hover { border-color: #7c6046; }
-#globe-site-list button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: #2d241d; }
+.globe-program + .globe-program { border-top: 1px solid var(--edge); }
+.globe-program-name { padding: 8px 7px; color: var(--ink); font-size: .78rem; font-weight: 600; }
+.globe-program-items { display: grid; gap: 6px; margin: 0 0 6px 6px; padding-left: 5px; border-left: 1px solid var(--edge); }
+#globe-site-list .globe-site-button { width: 100%; min-height: 57px; display: grid; align-content: center; gap: 4px; background: var(--input); color: var(--ink); border: 1px solid var(--edge); border-radius: 6px; text-align: left; padding: 7px 9px; }
+#globe-site-list .globe-site-button strong { font-size: .85rem; font-weight: 600; }
+#globe-site-list .globe-site-button small { color: var(--muted); font: .69rem/1.4 var(--mono); }
+#globe-site-list .globe-site-button:hover { border-color: #7c6046; }
+#globe-site-list .globe-site-button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: #2d241d; }
 .globe-attribution { grid-column: 1 / -1; }
 @media (max-width: 650px) {
   .site-globe { grid-template-columns: minmax(0, 1fr); }
   .globe-stage { height: clamp(300px, 75vw, 440px); }
   .globe-sites { border-left: 0; border-top: 1px solid var(--edge); }
-  #globe-site-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .globe-program-items { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 .assessment-launch { display: block; width: calc(100% - 48px); margin: 0 24px 18px; padding: 11px 14px; border: 1px solid var(--accent); border-radius: 6px; color: var(--accent); background: transparent; font: 600 .75rem var(--mono); cursor: pointer; }
 .assessment-launch:not(:disabled):hover { color: #24170c; background: var(--accent); }
