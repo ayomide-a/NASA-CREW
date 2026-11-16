@@ -15,4 +15,5 @@
   </defs>
   <path d="M46.8 48.5A24 24 0 0 1 19.2 15.2 21 21 0 1 0 46.8 48.5Z" fill="url(#moon)" filter="url(#glow)"/>
   <path d="m47 9 2.1 5.5 5.5 2.1-5.5 2.1L47 24l-2.1-5.3-5.4-2.1 5.4-2.1Z" fill="#fff2fb"/>
+  <text x="32" y="61" fill="#fff2fb" font-family="sans-serif" font-size="4" letter-spacing=".1" opacity=".8" text-anchor="middle">generated using SI</text>
 </svg>
