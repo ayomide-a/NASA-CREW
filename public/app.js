@@ -622,39 +622,33 @@ function updateLolaDem(latitude, longitudeEast) {
       renderLolaTileView();
 
       const stats = payload.topography?.elevation;
-      const local = payload.topography?.local;
       const aspect = payload.topography?.aspect;
       const roughness = payload.topography?.roughness;
       const curvature = payload.topography?.curvature;
-      const hazard = payload.topography?.hazard;
 
       lolaStatus.textContent = payload.dataset.title + ' loaded for Lat ' + latitude.toFixed(3) +
         '°, Lon ' + longitudeEast.toFixed(3) + '° E.';
 
-      if (stats && local) {
+      if (stats) {
         quantStats.textContent =
           'Site elevation: ' + payload.elevationMeters.toFixed(1) + ' m\n' +
           'Min/Max: ' + stats.minMeters.toFixed(1) + ' / ' + stats.maxMeters.toFixed(1) + ' m\n' +
           'Mean/Median: ' + stats.meanMeters.toFixed(1) + ' / ' + stats.medianMeters.toFixed(1) + ' m\n' +
-          'Std dev: ' + stats.stdDevMeters.toFixed(2) + ' m\n' +
-          'Slope (avg/max): ' + local.slopeMeanDeg.toFixed(2) + '° / ' + local.slopeMaxDeg.toFixed(2) + '°';
+          'Std dev: ' + stats.stdDevMeters.toFixed(2) + ' m';
       } else {
         quantStats.textContent = 'Site ' + payload.elevationMeters.toFixed(1) +
           ' m · detailed topography metrics unavailable for this request.';
       }
 
-      if (aspect && roughness && curvature && hazard) {
+      if (aspect && roughness && curvature) {
         demDetails.textContent =
           'Aspect (downslope): ' + aspect.downslopeAzimuthDeg.toFixed(1) + '°\n' +
           'Roughness RMS / TRI: ' + roughness.rmsMeters.toFixed(2) + ' / ' + roughness.triMeters.toFixed(2) + ' m\n' +
           'Moving roughness std: ' + roughness.movingWindowStdDevMeters.toFixed(2) + ' m\n' +
           'Curvature (profile/plan/total): ' + curvature.profileMeanPerMeter.toExponential(2) + ' / ' +
-          curvature.planMeanPerMeter.toExponential(2) + ' / ' + curvature.totalPerMeter.toExponential(2) + '\n' +
-          'Local relief: ' + hazard.localReliefMeters.toFixed(1) + ' m\n' +
-          'Slope > 10°: ' + (hazard.slopeExceedanceFractions.over10Deg * 100).toFixed(1) + '%\n' +
-          'Open sky: ' + (hazard.horizonExposure.openSkyFraction * 100).toFixed(1) + '%';
+          curvature.planMeanPerMeter.toExponential(2) + ' / ' + curvature.totalPerMeter.toExponential(2);
       } else {
-        demDetails.textContent = 'Aspect, roughness, curvature, and hazard indicators are unavailable for this request.';
+        demDetails.textContent = 'Aspect, roughness, and curvature indicators are unavailable for this request.';
       }
 
       if (payload.topographyError) {
@@ -2175,7 +2169,7 @@ function updateAssessment(params) {
   siteVerdict.textContent =
     'Site: ' + siteLabel + '\n' +
     'Period: ' + periodStart + ' to ' + periodStop + '\n' +
-    'Final Weighted Score: ' + objectives.finalScore.toFixed(1) + '/10';
+    'Final Score: ' + objectives.finalScore.toFixed(1) + '/10';
   const otherSiteResult = assessmentSite === 'a' ? comparisonResult : result;
   const otherSiteParams = assessmentSite === 'a' ? comparisonParams : resultParams;
   const otherLola = assessmentSite === 'a' ? assessmentLolaData.b : assessmentLolaData.a;
@@ -2203,7 +2197,7 @@ function updateAssessment(params) {
     rankSuffix(objectives.directEarthScore, otherObjectives?.directEarthScore);
 
   objectiveTerrainDetail.textContent =
-    'Local terrain rating summarizes LOLA-derived elevation context, slope, roughness, and curvature into a single 0-10 score.';
+    'Terrain visibility rating uses LOLA-derived factors with these weights: elevation context (60%), roughness (25%), slope (10%), and curvature (5%).';
   objectiveTerrainDetail.hidden = false;
   objectiveSolarAngleDetail.textContent = 'Based on mean/peak Sun elevation while visible.\nMean elevation: ' +
     objectives.details.sunMeanElevationDeg.toFixed(1) + '°.\nPeak elevation: ' +
@@ -2213,7 +2207,7 @@ function updateAssessment(params) {
   objectiveEarthDetail.textContent = 'Direct Earth Access: ' + objectives.details.earthDurationPercent.toFixed(1) +
     '% of window.\nTime before Earth set: ' + objectives.details.earthTimeBeforeSetHours.toFixed(1) + ' hr.';
 
-  objectiveOverall.textContent = 'Final Weighted Score: ' + objectives.finalScore.toFixed(1) + '/10' +
+  objectiveOverall.textContent = 'Final Score: ' + objectives.finalScore.toFixed(1) + '/10' +
     rankSuffix(objectives.finalScore, otherObjectives?.finalScore);
   objectiveLogic.textContent = '';
   objectiveLogic.hidden = true;
