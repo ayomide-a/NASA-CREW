@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Query NASA JPL Horizons for Sun and Earth azimuth and elevation from a site on the Moon.">
   <title>Moonwalkers 9 — Lunar Ephemeris Explorer</title>
+  <link rel="icon" href="/moon-icon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -23,16 +24,56 @@
 </head>
 <body>
   <header class="shell top">
-    <a class="brand" href="/" aria-label="Moonwalkers 9 home"><span aria-hidden="true" class="brand-icon"></span>MOONWALKERS<span class="brand-number">/ 09</span></a>
+    <a class="brand" href="/" aria-label="Moonwalkers 9 home"><img src="/moon-icon.svg" alt="" class="brand-icon">MOONWALKERS<span class="brand-number">/ 09</span></a>
     <a class="docs" href="https://ssd-api.jpl.nasa.gov/doc/horizons.html" target="_blank" rel="noopener">JPL Horizons docs <span aria-hidden="true">↗</span></a>
   </header>
 
   <main class="shell">
+    <nav id="site-tabs" class="site-tabs" role="tablist" aria-label="Website sections">
+      <button id="overview-tab" class="site-tab" type="button" role="tab" aria-selected="true" aria-controls="overview-panel" tabindex="0">Overview</button>
+      <button id="explorer-tab" class="site-tab" type="button" role="tab" aria-selected="false" aria-controls="explorer-panel" tabindex="-1">Lunar explorer</button>
+    </nav>
+
+    <section id="overview-panel" class="overview-panel" role="tabpanel" aria-labelledby="overview-tab" tabindex="0">
+      <div class="overview-hero">
+        <div class="hero-art" aria-hidden="true">
+          <div class="orbit"></div>
+        </div>
+        <div class="kicker"><span></span> A FIELD GUIDE TO LUNAR SITE PLANNING</div>
+        <h1>Every landing site has a sky story<span>.</span><span class="sparkle-icon hero-sparkle" aria-hidden="true">✧</span></h1>
+        <p>Explore how location, terrain, and time shape the view of the Sun and Earth from the Moon.</p>
+        <button id="overview-explore" class="overview-cta" type="button">Open the lunar explorer <span aria-hidden="true">→</span></button>
+      </div>
+
+      <div class="overview-cards">
+        <article class="overview-card">
+          <span class="overview-number">01 · THE PLACE</span>
+          <h2><span class="moon-glyph" aria-hidden="true">☾</span>Why landing sites matter</h2>
+          <p>A lunar landing site is more than a point on a map. Mission teams weigh science goals alongside slope, surface hazards, lighting, thermal conditions, access to resources, and communications.</p>
+          <p>Those factors vary across the Moon. Comparing candidate locations helps make trade-offs visible early in mission planning.</p>
+        </article>
+        <article class="overview-card">
+          <span class="overview-number">02 · THE SKY</span>
+          <h2><span class="moon-glyph" aria-hidden="true">☽</span>Why ephemeris matters</h2>
+          <p>An ephemeris predicts where celestial objects appear in the sky at a particular place and time. Here, Sun and Earth azimuth and elevation describe their direction above the local horizon.</p>
+          <p>Sunlight affects illumination and solar-power opportunities; Earth’s visibility matters for direct-to-Earth communications. Nearby terrain can block either line of sight.</p>
+        </article>
+        <article class="overview-card">
+          <span class="overview-number">03 · THE TOOL</span>
+          <h2><span class="moon-glyph" aria-hidden="true">☾</span>How this explorer works</h2>
+          <p>Choose a site on the 2D map or 3D globe, select a point of interest, or enter coordinates. Set an observation window and request Sun and Earth positions from NASA JPL Horizons.</p>
+          <p>Review sky-position charts, time above the terrain horizon, and available LOLA topography. Enable comparison to inspect a second site, then explore the results table or download a CSV.</p>
+        </article>
+      </div>
+      <p class="overview-note">This explorer supports comparison and mission planning; it is not a complete landing-site safety certification.</p>
+    </section>
+
+    <div id="explorer-panel" role="tabpanel" aria-labelledby="explorer-tab" tabindex="0" hidden>
     <section class="hero">
       <div class="hero-art" aria-hidden="true"><div class="orbit"></div></div>
       <div class="hero-copy">
         <div class="kicker"><span></span> NASA SPACE APPS CHALLENGE</div>
-        <h1>Lunar Ephemeris Explorer<span>.</span></h1>
+        <h1>Lunar Ephemeris Explorer<span>.</span><span class="sparkle-icon hero-sparkle" aria-hidden="true">✧</span></h1>
         <p>Track the Sun and Earth from any site on the Moon using NASA JPL Horizons.</p>
       </div>
     </section>
@@ -41,7 +82,7 @@
       <div class="map-heading">
         <div class="map-toolbar">
           <div>
-            <h2 id="map-heading">Choose a lunar landing site</h2>
+            <h2 id="map-heading"><span class="moon-glyph" aria-hidden="true">☾</span>Choose a lunar landing site</h2>
             <p id="map-instructions">Click the Moon to set Site A, then add a second site to compare.</p>
           </div>
           <div class="map-mode" role="group" aria-label="Site selector view">
@@ -81,19 +122,19 @@
         </div>
         <div class="site-selection">
           <div class="site-selection-heading">
-            <h3>Selected sites</h3>
+            <h3>Selected sites <span class="sparkle-icon" aria-hidden="true">✦</span></h3>
             <label class="compare-toggle"><input id="compare-enabled" type="checkbox">Compare two sites</label>
           </div>
           <div class="site-selection-grid">
             <div id="site-a-map-card" class="site-coordinate-card">
-              <strong>Site A</strong>
+              <strong>Site A <span class="sparkle-icon" aria-hidden="true">✧</span></strong>
               <output id="site-a-coordinates" aria-live="polite">Lat −89.000° · Lon 0.000° E</output>
               <small>Use the map or enter coordinates in Observation Setup.</small>
               <button id="site-a-map-pick" class="map-pick-button" type="button" aria-pressed="true" hidden>Choose Site A</button>
               <p id="site-a-map-status" class="field-hint" role="status" aria-live="polite" hidden></p>
             </div>
             <div id="site-b-map-card" class="site-coordinate-card" hidden>
-              <strong>Site B</strong>
+              <strong>Site B <span class="sparkle-icon" aria-hidden="true">✧</span></strong>
               <output id="site-b-coordinates" aria-live="polite">Enter valid coordinates in Observation Setup.</output>
               <small>Use the map or enter coordinates in Observation Setup.</small>
               <button id="site-b-map-pick" class="map-pick-button" type="button" aria-pressed="false">Choose Site B</button>
@@ -303,6 +344,7 @@
           </div>
         </div>
       </section>
+    </div>
     </div>
   </main>
 

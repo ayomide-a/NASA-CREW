@@ -1,3 +1,5 @@
+import './sparkle-trail.js';
+
 const form = document.querySelector('#query-form');
 const run = document.querySelector('#run-observation');
 const status = document.querySelector('#status');
@@ -2690,3 +2692,34 @@ const chartResizeObserver = new ResizeObserver(() => {
 });
 chartResizeObserver.observe(chartCanvases.a);
 chartResizeObserver.observe(chartCanvases.b);
+
+const siteTabs = [...document.querySelectorAll('#site-tabs [role="tab"]')];
+const explorerTab = document.querySelector('#explorer-tab');
+
+function activateSiteTab(tab, moveFocus = false) {
+  for (const candidate of siteTabs) {
+    const active = candidate === tab;
+    candidate.setAttribute('aria-selected', String(active));
+    candidate.tabIndex = active ? 0 : -1;
+    document.getElementById(candidate.getAttribute('aria-controls')).hidden = !active;
+  }
+  if (tab === explorerTab) requestAnimationFrame(() => lunarMap.updateSize());
+  if (moveFocus) tab.focus();
+}
+
+for (const tab of siteTabs) {
+  tab.addEventListener('click', () => activateSiteTab(tab));
+  tab.addEventListener('keydown', event => {
+    const currentIndex = siteTabs.indexOf(tab);
+    let nextIndex;
+    if (event.key === 'ArrowRight') nextIndex = (currentIndex + 1) % siteTabs.length;
+    else if (event.key === 'ArrowLeft') nextIndex = (currentIndex - 1 + siteTabs.length) % siteTabs.length;
+    else if (event.key === 'Home') nextIndex = 0;
+    else if (event.key === 'End') nextIndex = siteTabs.length - 1;
+    else return;
+    event.preventDefault();
+    activateSiteTab(siteTabs[nextIndex], true);
+  });
+}
+
+document.querySelector('#overview-explore').addEventListener('click', () => activateSiteTab(explorerTab, true));
