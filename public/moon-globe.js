@@ -87,7 +87,7 @@ function createRegionLayer(moon, renderer) {
   return { setRegions, regionAt };
 }
 
-export async function createMoonGlobe({ viewport, pinLayer, onSelect, onRegionSelect }) {
+export async function createMoonGlobe({ viewport, pinLayer, onSelect, onRegionSelect, onSurfaceSelect }) {
   const canvas = document.createElement('canvas');
   const gl = canvas.getContext('webgl2', { antialias: true, alpha: true });
   if (!gl) throw new Error('WebGL 2 is unavailable');
@@ -114,6 +114,7 @@ export async function createMoonGlobe({ viewport, pinLayer, onSelect, onRegionSe
   controls.zoomSpeed = 0.75;
 
   let pins = [];
+  let selectionPins = [];
   let regionLayer;
   let pointerStart;
   const projected = new THREE.Vector3();
@@ -129,14 +130,21 @@ export async function createMoonGlobe({ viewport, pinLayer, onSelect, onRegionSe
     renderer.render(scene, camera);
 
     for (const { button, position } of pins) {
-      projected.copy(position).project(camera);
-      const visible = position.dot(camera.position) > radius * radius &&
-        Math.abs(projected.x) < 0.96 && Math.abs(projected.y) < 0.92;
-      button.hidden = !visible;
-      if (visible) {
-        button.style.left = (projected.x + 1) * 50 + '%';
-        button.style.top = (1 - projected.y) * 50 + '%';
-      }
+      positionMarker(button, position);
+    }
+    for (const { marker, position } of selectionPins) {
+      positionMarker(marker, position);
+    }
+  }
+
+  function positionMarker(marker, position) {
+    projected.copy(position).project(camera);
+    const visible = position.dot(camera.position) > radius * radius &&
+      Math.abs(projected.x) < 0.96 && Math.abs(projected.y) < 0.92;
+    marker.hidden = !visible;
+    if (visible) {
+      marker.style.left = (projected.x + 1) * 50 + '%';
+      marker.style.top = (1 - projected.y) * 50 + '%';
     }
   }
 
@@ -186,7 +194,7 @@ export async function createMoonGlobe({ viewport, pinLayer, onSelect, onRegionSe
   });
   canvas.addEventListener('pointercancel', () => { pointerStart = undefined; });
   canvas.addEventListener('click', event => {
-    if (!pointerStart || !regionLayer) return;
+    if (!pointerStart) return;
     pointerStart = undefined;
     const bounds = canvas.getBoundingClientRect();
     pointer.set(2 * (event.clientX - bounds.left) / bounds.width - 1,
@@ -195,8 +203,11 @@ export async function createMoonGlobe({ viewport, pinLayer, onSelect, onRegionSe
     const hit = raycaster.intersectObject(moon, false)[0];
     if (!hit?.uv) return;
     const { x, y } = hit.uv;
-    const index = regionLayer.regionAt(x, y);
-    if (index !== undefined) onRegionSelect(index, y * 180 - 90, x * 360 - 180);
+    const latitude = y * 180 - 90;
+    const longitude = x * 360 - 180;
+    const index = regionLayer?.regionAt(x, y);
+    if (index !== undefined) onRegionSelect(index, latitude, longitude);
+    else onSurfaceSelect?.(latitude, longitude);
   });
 
   function setSites(sites) {
@@ -210,8 +221,29 @@ export async function createMoonGlobe({ viewport, pinLayer, onSelect, onRegionSe
       button.addEventListener('click', () => onSelect(site));
       return { site, button, position: lunarPosition(site) };
     });
-    pinLayer.replaceChildren(...pins.map(({ button }) => button));
+    updatePinLayer();
     draw();
+  }
+
+  function setSelectionSites(sites) {
+    selectionPins = sites.map(site => {
+      const marker = document.createElement('span');
+      marker.className = 'globe-selection-marker';
+      marker.textContent = site.label;
+      marker.setAttribute('role', 'img');
+      marker.setAttribute('aria-label', 'Site ' + site.label + ' selected location');
+      marker.dataset.site = site.label;
+      return { marker, position: lunarPosition(site) };
+    });
+    updatePinLayer();
+    draw();
+  }
+
+  function updatePinLayer() {
+    pinLayer.replaceChildren(
+      ...pins.map(({ button }) => button),
+      ...selectionPins.map(({ marker }) => marker)
+    );
   }
 
   function select(site) {
@@ -222,5 +254,5 @@ export async function createMoonGlobe({ viewport, pinLayer, onSelect, onRegionSe
   fitViewport();
   focus();
   new ResizeObserver(fitViewport).observe(viewport);
-  return { setSites, select, focus, setRegions, focusRegions };
+  return { setSites, setSelectionSites, select, focus, setRegions, focusRegions };
 }

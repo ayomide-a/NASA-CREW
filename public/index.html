@@ -85,16 +85,19 @@
             <label class="compare-toggle"><input id="compare-enabled" type="checkbox">Compare two sites</label>
           </div>
           <div class="site-selection-grid">
-            <div class="site-coordinate-card">
+            <div id="site-a-map-card" class="site-coordinate-card">
               <strong>Site A</strong>
               <output id="site-a-coordinates" aria-live="polite">Lat −89.000° · Lon 0.000° E</output>
-              <small>Click the map or enter coordinates in Observation Setup.</small>
+              <small>Use the map or enter coordinates in Observation Setup.</small>
+              <button id="site-a-map-pick" class="map-pick-button" type="button" aria-pressed="true" hidden>Choose Site A</button>
+              <p id="site-a-map-status" class="field-hint" role="status" aria-live="polite" hidden></p>
             </div>
             <div id="site-b-map-card" class="site-coordinate-card" hidden>
               <strong>Site B</strong>
-              <output id="site-b-coordinates" aria-live="polite">Choose a point on the map or enter coordinates below.</output>
-              <button id="compare-map-pick" class="map-pick-button" type="button" aria-pressed="false">Choose Site B on map</button>
-              <p id="compare-map-status" class="field-hint" role="status" aria-live="polite" hidden></p>
+              <output id="site-b-coordinates" aria-live="polite">Enter valid coordinates in Observation Setup.</output>
+              <small>Use the map or enter coordinates in Observation Setup.</small>
+              <button id="site-b-map-pick" class="map-pick-button" type="button" aria-pressed="false">Choose Site B</button>
+              <p id="site-b-map-status" class="field-hint" role="status" aria-live="polite" hidden></p>
             </div>
           </div>
         </div>
@@ -217,54 +220,58 @@
           <div class="sky-view">
             <div class="sky-charts">
               <section class="site-chart" aria-labelledby="site-a-chart-title">
-                <h4 id="site-a-chart-title">Site A</h4>
-                <canvas id="chart-a" role="img" aria-label="Site A Sun and Earth azimuth and elevation against its terrain horizon."></canvas>
-                <div id="site-a-playback" class="site-playback" hidden>
-                  <button type="button" id="playback-a" aria-pressed="false">Play</button>
-                  <input id="time-slider-a" type="range" min="0" max="0" value="0" step="1" aria-label="Site A observation time">
-                  <output id="current-reading-a" for="time-slider-a" aria-live="polite"></output>
+                <div class="site-chart-plot">
+                  <h4 id="site-a-chart-title">Site A</h4>
+                  <canvas id="chart-a" role="img" aria-label="Site A Sun and Earth azimuth and elevation against its terrain horizon."></canvas>
+                  <div id="site-a-playback" class="site-playback" hidden>
+                    <button type="button" id="playback-a" aria-pressed="false">Play</button>
+                    <input id="time-slider-a" type="range" min="0" max="0" value="0" step="1" aria-label="Site A observation time">
+                    <output id="current-reading-a" for="time-slider-a" aria-live="polite"></output>
+                  </div>
                 </div>
+                <aside class="visibility" aria-label="Site A time above the terrain horizon">
+                  <h3>Site A · above terrain horizon</h3>
+                  <div class="visibility-items">
+                    <div class="visibility-item">
+                      <div id="sun-visibility-pie" class="visibility-pie sun-visibility" role="img" aria-label="Sun above horizon 0%"><span id="sun-visibility-value">0%</span></div>
+                      <span class="sun-color">Sun</span>
+                      <span id="sun-visibility-duration"></span>
+                    </div>
+                    <div class="visibility-item">
+                      <div id="earth-visibility-pie" class="visibility-pie earth-visibility" role="img" aria-label="Earth above horizon 0%"><span id="earth-visibility-value">0%</span></div>
+                      <span class="earth-color">Earth</span>
+                      <span id="earth-visibility-duration"></span>
+                    </div>
+                  </div>
+                </aside>
               </section>
               <section id="site-b-chart-panel" class="site-chart" aria-labelledby="site-b-chart-title" hidden>
-                <h4 id="site-b-chart-title">Site B</h4>
-                <canvas id="chart-b" role="img" aria-label="Site B Sun and Earth azimuth and elevation against its terrain horizon."></canvas>
-                <div id="site-b-playback" class="site-playback" hidden>
-                  <button type="button" id="playback-b" aria-pressed="false">Play</button>
-                  <input id="time-slider-b" type="range" min="0" max="0" value="0" step="1" aria-label="Site B observation time">
-                  <output id="current-reading-b" for="time-slider-b" aria-live="polite"></output>
+                <div class="site-chart-plot">
+                  <h4 id="site-b-chart-title">Site B</h4>
+                  <canvas id="chart-b" role="img" aria-label="Site B Sun and Earth azimuth and elevation against its terrain horizon."></canvas>
+                  <div id="site-b-playback" class="site-playback" hidden>
+                    <button type="button" id="playback-b" aria-pressed="false">Play</button>
+                    <input id="time-slider-b" type="range" min="0" max="0" value="0" step="1" aria-label="Site B observation time">
+                    <output id="current-reading-b" for="time-slider-b" aria-live="polite"></output>
+                  </div>
                 </div>
+                <aside id="comparison-visibility" class="visibility" aria-label="Site B time above the terrain horizon" hidden>
+                  <h3>Site B · above terrain horizon</h3>
+                  <div class="visibility-items">
+                    <div class="visibility-item">
+                      <div id="compare-sun-visibility-pie" class="visibility-pie sun-visibility" role="img" aria-label="Site B Sun above horizon 0%"><span id="compare-sun-visibility-value">0%</span></div>
+                      <span class="sun-color">Sun</span>
+                      <span id="compare-sun-visibility-duration"></span>
+                    </div>
+                    <div class="visibility-item">
+                      <div id="compare-earth-visibility-pie" class="visibility-pie earth-visibility" role="img" aria-label="Site B Earth above horizon 0%"><span id="compare-earth-visibility-value">0%</span></div>
+                      <span class="earth-color">Earth</span>
+                      <span id="compare-earth-visibility-duration"></span>
+                    </div>
+                  </div>
+                </aside>
               </section>
             </div>
-            <aside class="visibility" aria-label="Time above the terrain horizon">
-              <h3>Site A · above terrain horizon</h3>
-              <div class="visibility-items">
-                <div class="visibility-item">
-                  <div id="sun-visibility-pie" class="visibility-pie sun-visibility" role="img" aria-label="Sun above horizon 0%"><span id="sun-visibility-value">0%</span></div>
-                  <span class="sun-color">Sun</span>
-                  <span id="sun-visibility-duration"></span>
-                </div>
-                <div class="visibility-item">
-                  <div id="earth-visibility-pie" class="visibility-pie earth-visibility" role="img" aria-label="Earth above horizon 0%"><span id="earth-visibility-value">0%</span></div>
-                  <span class="earth-color">Earth</span>
-                  <span id="earth-visibility-duration"></span>
-                </div>
-              </div>
-              <div id="comparison-visibility" hidden>
-                <h3>Site B · above terrain horizon</h3>
-                <div class="visibility-items">
-                  <div class="visibility-item">
-                    <div id="compare-sun-visibility-pie" class="visibility-pie sun-visibility" role="img" aria-label="Site B Sun above horizon 0%"><span id="compare-sun-visibility-value">0%</span></div>
-                    <span class="sun-color">Sun</span>
-                    <span id="compare-sun-visibility-duration"></span>
-                  </div>
-                  <div class="visibility-item">
-                    <div id="compare-earth-visibility-pie" class="visibility-pie earth-visibility" role="img" aria-label="Site B Earth above horizon 0%"><span id="compare-earth-visibility-value">0%</span></div>
-                    <span class="earth-color">Earth</span>
-                    <span id="compare-earth-visibility-duration"></span>
-                  </div>
-                </div>
-              </div>
-            </aside>
           </div>
           <div id="shared-playback" class="playback">
             <button type="button" id="playback" aria-pressed="false">Play</button>

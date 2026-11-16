@@ -125,6 +125,10 @@ const siteBTimeWindow = document.querySelector('#site-b-time-window');
 const sharedWindowNote = document.querySelector('#shared-window-note');
 const siteACoordinates = document.querySelector('#site-a-coordinates');
 const siteBCoordinates = document.querySelector('#site-b-coordinates');
+const siteAMapPickButton = document.querySelector('#site-a-map-pick');
+const siteBMapPickButton = document.querySelector('#site-b-map-pick');
+const siteAMapStatus = document.querySelector('#site-a-map-status');
+const siteBMapStatus = document.querySelector('#site-b-map-status');
 const siteBMapCard = document.querySelector('#site-b-map-card');
 const pageSize = 8;
 let result;
@@ -133,8 +137,6 @@ const compareEnabled = document.querySelector('#compare-enabled');
 const compareCoordinates = document.querySelector('#compare-coordinates');
 const compareLatitudeInput = document.querySelector('#compare-latitude');
 const compareLongitudeInput = document.querySelector('#compare-longitude');
-const compareMapPickButton = document.querySelector('#compare-map-pick');
-const compareMapStatus = document.querySelector('#compare-map-status');
 const comparisonReadings = document.querySelector('#comparison-readings');
 const comparisonSiteLabel = document.querySelector('#comparison-site-label');
 const compareSunReading = document.querySelector('#compare-sun-reading');
@@ -202,7 +204,7 @@ function cycleLolaTileView(direction) {
 
 lolaPrevView?.addEventListener('click', () => cycleLolaTileView(-1));
 lolaNextView?.addEventListener('click', () => cycleLolaTileView(1));
-let isPickingComparisonSite = false;
+let activeSiteSelection = 'a';
 
 const lunarExtent = [-180, -90, 180, 90];
 const lunarProjection = new ol.proj.Projection({
@@ -498,8 +500,8 @@ function updateObservationWindow(site) {
 }
 
 function selectPoiSite(site) {
-  updateSelectedSite(site.latitude, site.longitude);
-  updateObservationWindow(site);
+  selectActiveSite(site.latitude, site.longitude);
+  if (activeSiteSelection === 'a') updateObservationWindow(site);
 }
 
 function validSiteCoordinates(latitudeField, longitudeField) {
@@ -515,6 +517,7 @@ function validSiteCoordinates(latitudeField, longitudeField) {
 
 function updateMapMarkers() {
   updateSiteCoordinateLabels();
+  updateGlobeSelectionMarkers();
   markerSource.clear();
   const mapView = mapViewSelect.value;
   const extent = mapView === 'global' ? lunarExtent : northPolarExtent;
@@ -539,6 +542,17 @@ function updateMapMarkers() {
   }
 }
 
+function updateGlobeSelectionMarkers() {
+  const sites = [];
+  const siteA = validSiteCoordinates(latitudeInput, longitudeInput);
+  const siteB = compareEnabled.checked
+    ? validSiteCoordinates(compareLatitudeInput, compareLongitudeInput)
+    : undefined;
+  if (siteA) sites.push({ label: 'A', ...siteA });
+  if (siteB) sites.push({ label: 'B', ...siteB });
+  globe?.setSelectionSites(sites);
+}
+
 function formatSiteCoordinates(coordinates) {
   const longitude = eastLongitude(coordinates.longitude);
   return 'Lat ' + coordinates.latitude.toFixed(3) + '° · Lon ' + longitude.toFixed(3) + '° E';
@@ -552,7 +566,7 @@ function updateSiteCoordinateLabels() {
     : 'Enter valid coordinates in Observation Setup.';
   siteBCoordinates.textContent = siteB
     ? formatSiteCoordinates(siteB)
-    : 'Choose a point on the map or enter coordinates below.';
+    : 'Enter valid coordinates in Observation Setup.';
 }
 
 function updateSelectedSite(latitude, longitude) {
@@ -562,6 +576,17 @@ function updateSelectedSite(latitude, longitude) {
   updateGlobeSelection();
   updateMapMarkers();
   updateLolaDem(latitude, longitudeEast);
+}
+
+function selectActiveSite(latitude, longitude) {
+  if (activeSiteSelection === 'b' && compareEnabled.checked) {
+    const longitudeEast = eastLongitude(longitude);
+    compareLatitudeInput.value = latitude.toFixed(6);
+    compareLongitudeInput.value = longitudeEast.toFixed(6);
+    updateMapMarkers();
+    return;
+  }
+  updateSelectedSite(latitude, longitude);
 }
 
 function updateLolaDem(latitude, longitudeEast) {
@@ -705,11 +730,21 @@ function chooseGlobeSite(site) {
   focusedGlobeSite = site;
   updateGlobePins();
   updateGlobeSiteButtons();
-  updateSelectedSite(site.latitude, site.longitude);
+  if (activeSiteSelection === 'b' && compareEnabled.checked) {
+    selectActiveSite(site.latitude, site.longitude);
+    globe?.select(site);
+    globe?.focus(site);
+    return;
+  }
+  selectActiveSite(site.latitude, site.longitude);
   globe?.focus(site);
 }
 
 function toggleGlobeSite(site) {
+  if (activeSiteSelection === 'b' && compareEnabled.checked) {
+    chooseGlobeSite(site);
+    return;
+  }
   const index = globeSites.indexOf(site);
   if (visibleGlobePoiIndexes.has(index) && focusedGlobeSite === site) {
     visibleGlobePoiIndexes.delete(index);
@@ -729,6 +764,7 @@ function toggleGlobeSite(site) {
 
 function updateGlobePins() {
   globe?.setSites([...visibleGlobePoiIndexes].map(index => pointsOfInterest[index]));
+  updateGlobeSelectionMarkers();
 }
 
 function updateGlobeSiteButtons() {
@@ -817,7 +853,10 @@ async function initializeGlobe() {
       onSelect: chooseGlobeSite,
       onRegionSelect(index, latitude, longitude) {
         showRegionAbout(index);
-        updateSelectedSite(latitude, longitude);
+        selectActiveSite(latitude, longitude);
+      },
+      onSurfaceSelect(latitude, longitude) {
+        selectActiveSite(latitude, longitude);
       }
     });
     updateGlobePins();
@@ -839,11 +878,17 @@ function showSiteView(isGlobe) {
   map2d.hidden = isGlobe;
   for (const element of mapOnlyElements) element.hidden = isGlobe;
   (isGlobe ? globeStage : map2d).append(regionAboutPanel);
-  mapInstructions.textContent = isGlobe ?
-    'Choose a point of interest or use Lunar regions to highlight areas on the globe.' :
-    'Click the Moon to set Site A, then add a second site to compare.';
+  updateMapInstructions();
   if (isGlobe) globeInitialization ??= initializeGlobe();
   else lunarMap.updateSize();
+}
+
+function updateMapInstructions() {
+  const isGlobe = !globePanel.hidden;
+  const activeSite = activeSiteSelection === 'a' ? 'Site A' : 'Site B';
+  mapInstructions.textContent = isGlobe
+    ? 'Click the globe surface or choose a point of interest to set ' + activeSite + '.'
+    : 'Click the Moon to set ' + activeSite + '.';
 }
 
 function updatePoiHighlights() {
@@ -1413,7 +1458,7 @@ lunarMap.on('singleclick', event => {
     }
     return undefined;
   }, { hitTolerance: 8 });
-  if (clickedPoi && !isPickingComparisonSite) {
+  if (clickedPoi) {
     hideRegionPopup();
     const site = pointsOfInterest[clickedPoi.get('poiIndex')];
     selectPoiSite(site);
@@ -1432,16 +1477,7 @@ lunarMap.on('singleclick', event => {
   } else {
     hideRegionPopup();
   }
-  if (isPickingComparisonSite) {
-    const longitudeEast = eastLongitude(longitude);
-    compareLatitudeInput.value = latitude.toFixed(6);
-    compareLongitudeInput.value = longitudeEast.toFixed(6);
-    updateMapMarkers();
-    setComparisonMapPicking(false, 'Site B set to Lat ' + latitude.toFixed(3) +
-      '°, Lon ' + longitudeEast.toFixed(3) + '° E.');
-    return;
-  }
-  updateSelectedSite(latitude, longitude);
+  selectActiveSite(latitude, longitude);
 });
 latitudeInput.addEventListener('change', updateMarkerFromInputs);
 longitudeInput.addEventListener('change', updateMarkerFromInputs);
@@ -2541,13 +2577,15 @@ function updateComparisonFields() {
   compareCoordinates.hidden = !enabled;
   compareLatitudeInput.disabled = !enabled;
   compareLongitudeInput.disabled = !enabled;
-  compareMapPickButton.disabled = !enabled;
+  siteAMapPickButton.hidden = !enabled;
   siteBMapCard.hidden = !enabled;
   separateWindowControl.hidden = !enabled;
   separateWindows.disabled = !enabled;
   if (!enabled) {
     separateWindows.checked = false;
-    setComparisonMapPicking(false);
+    setActiveSiteSelection('a');
+  } else {
+    setActiveSiteSelection('b');
   }
   updateTimeWindowFields();
   updateMapMarkers();
@@ -2565,27 +2603,20 @@ function updateTimeWindowFields() {
   sharedWindowNote.hidden = !compareEnabled.checked || separate;
 }
 
-function setComparisonMapPicking(active, message) {
-  if (active && !globePanel.hidden) showSiteView(false);
-  isPickingComparisonSite = active;
-  compareMapPickButton.setAttribute('aria-pressed', String(active));
-  compareMapPickButton.textContent = active ? 'Cancel map selection' : 'Choose Site B on map';
-  if (message !== undefined) {
-    compareMapStatus.textContent = message;
-    compareMapStatus.hidden = !message;
-  } else if (active) {
-    compareMapStatus.textContent = 'Click the lunar map to set Site B. Site A will remain unchanged.';
-    compareMapStatus.hidden = false;
-  } else {
-    compareMapStatus.textContent = '';
-    compareMapStatus.hidden = true;
-  }
+function setActiveSiteSelection(site) {
+  activeSiteSelection = site;
+  siteAMapPickButton.setAttribute('aria-pressed', String(site === 'a'));
+  siteBMapPickButton.setAttribute('aria-pressed', String(site === 'b'));
+  siteAMapStatus.textContent = site === 'a' ? 'Map selections update Site A.' : '';
+  siteAMapStatus.hidden = !compareEnabled.checked || site !== 'a';
+  siteBMapStatus.textContent = site === 'b' ? 'Map selections update Site B.' : '';
+  siteBMapStatus.hidden = !compareEnabled.checked || site !== 'b';
+  updateMapInstructions();
 }
 compareEnabled.addEventListener('change', updateComparisonFields);
 separateWindows.addEventListener('change', updateTimeWindowFields);
-compareMapPickButton.addEventListener('click', () => {
-  setComparisonMapPicking(!isPickingComparisonSite);
-});
+siteAMapPickButton.addEventListener('click', () => setActiveSiteSelection('a'));
+siteBMapPickButton.addEventListener('click', () => setActiveSiteSelection('b'));
 updateComparisonFields();
 
 playback.addEventListener('click', () => {
