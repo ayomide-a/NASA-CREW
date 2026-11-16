@@ -56,6 +56,17 @@ const compareEarthVisibilityDuration = document.querySelector('#compare-earth-vi
 const terrainStatus = document.querySelector('#terrain-status');
 const siteRating = document.querySelector('#site-rating');
 const siteVerdict = document.querySelector('#site-verdict');
+const objectiveTerrainScore = document.querySelector('#objective-terrain-score');
+const objectiveSolarAngleScore = document.querySelector('#objective-solar-angle-score');
+const objectiveSunlightScore = document.querySelector('#objective-sunlight-score');
+const objectiveEarthScore = document.querySelector('#objective-earth-score');
+const objectiveTerrainDetail = document.querySelector('#objective-terrain-detail');
+const objectiveSolarAngleDetail = document.querySelector('#objective-solar-angle-detail');
+const objectiveSunlightDetail = document.querySelector('#objective-sunlight-detail');
+const objectiveEarthDetail = document.querySelector('#objective-earth-detail');
+const objectiveOverall = document.querySelector('#objective-overall');
+const objectiveLogic = document.querySelector('#objective-logic');
+const objectiveWarnings = document.querySelector('#objective-warnings');
 const assessment = {
   sun: { visible: document.querySelector('#sun-assessment-visible'), time: document.querySelector('#sun-assessment-time'), max: document.querySelector('#sun-assessment-max'), obstruction: document.querySelector('#sun-assessment-obstruction') },
   earth: { visible: document.querySelector('#earth-assessment-visible'), time: document.querySelector('#earth-assessment-time'), max: document.querySelector('#earth-assessment-max'), obstruction: document.querySelector('#earth-assessment-obstruction') }
@@ -160,6 +171,8 @@ const chartZoom = { a: undefined, b: undefined };
 let lolaRequest;
 const lolaTileViews = [];
 let lolaTileViewIndex = 0;
+const assessmentLolaData = { a: undefined, b: undefined };
+const assessmentLolaCache = new Map();
 
 function renderLolaTileView() {
   if (!lolaPreview || !lolaSpotPreview || !lolaPrevView || !lolaNextView || !lolaViewLabel) return;
@@ -569,6 +582,9 @@ function updateLolaDem(latitude, longitudeEast) {
     .then(async response => {
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error ?? 'LOLA DEM request failed.');
+      const siteKey = latitude.toFixed(4) + '|' + longitudeEast.toFixed(4);
+      assessmentLolaCache.set(siteKey, payload);
+      assessmentLolaData.a = payload;
       lolaPreview.src = payload.tile.previewUrl;
       lolaTileViews.push({ key: 'dem', label: 'DEM tile' });
       if (payload.spotObservations?.previewDataUrl && lolaSpotPreview) {
@@ -621,6 +637,8 @@ function updateLolaDem(latitude, longitudeEast) {
       if (!payload.spotObservations?.previewDataUrl) {
         demDetails.textContent += ' LOLA spot observations are unavailable for this location.';
       }
+
+      if (resultParams) updateAssessment(resultParams);
     })
     .catch(error => {
       if (error.name === 'AbortError') return;
@@ -636,6 +654,29 @@ function updateLolaDem(latitude, longitudeEast) {
     .finally(() => {
       lolaRequest = undefined;
     });
+}
+
+async function loadAssessmentLola(siteKey, params) {
+  const latitude = Number(params?.get('latitude'));
+  const longitude = Number(params?.get('longitude'));
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
+  const cacheKey = latitude.toFixed(4) + '|' + eastLongitude(longitude).toFixed(4);
+  if (assessmentLolaCache.has(cacheKey)) {
+    assessmentLolaData[siteKey] = assessmentLolaCache.get(cacheKey);
+    updateAssessment(siteKey === 'b' ? comparisonParams : resultParams);
+    return;
+  }
+  try {
+    const query = new URLSearchParams({ latitude: String(latitude), longitude: String(longitude) });
+    const response = await fetch('/api/lola?' + query);
+    const payload = await response.json();
+    if (!response.ok) return;
+    assessmentLolaCache.set(cacheKey, payload);
+    assessmentLolaData[siteKey] = payload;
+    updateAssessment(siteKey === 'b' ? comparisonParams : resultParams);
+  } catch {
+    // Keep assessment resilient when LOLA topography fetch fails.
+  }
 }
 
 function updateMarkerFromInputs() {
@@ -1808,9 +1849,269 @@ function targetStats(target, params, siteResult = result) {
   return { percentage, maximum, blockedPercentage: blocked / (stop - start) * 100 };
 }
 
+function clampScore(value) {
+  return Math.max(0, Math.min(100, value));
+}
+
+function angularSeparation(first, second) {
+  return Math.abs(((first - second + 540) % 360) - 180);
+}
+
+function letterGrade(score) {
+  if (score >= 97) return 'A+';
+  if (score >= 93) return 'A';
+  if (score >= 90) return 'A-';
+  if (score >= 87) return 'B+';
+  if (score >= 83) return 'B';
+  if (score >= 80) return 'B-';
+  if (score >= 77) return 'C+';
+  if (score >= 73) return 'C';
+  if (score >= 70) return 'C-';
+  if (score >= 67) return 'D+';
+  if (score >= 63) return 'D';
+  if (score >= 60) return 'D-';
+  return 'F';
+}
+
+function terrainFactorScores(siteResult, stats, lolaPayload) {
+  const scores = {
+    elevationScore: 50,
+    slopeScore: 50,
+    roughnessScore: 50,
+    curvatureScore: 50,
+    downslopeScore: 50,
+    hasTopography: false
+  };
+
+  const topography = lolaPayload?.topography;
+  if (!topography?.elevation || !topography?.local || !topography?.roughness ||
+      !topography?.curvature || !topography?.aspect || !topography?.hazard) {
+    return scores;
+  }
+
+  scores.hasTopography = true;
+  const elevation = topography.elevation;
+  const local = topography.local;
+  const roughness = topography.roughness;
+  const curvature = topography.curvature;
+  const aspect = topography.aspect;
+  const hazard = topography.hazard;
+
+  const elevationRange = Math.max(1, elevation.maxMeters - elevation.minMeters);
+  const relativeElevation = (lolaPayload.elevationMeters - elevation.minMeters) / elevationRange;
+  scores.elevationScore = clampScore(100 - Math.abs(relativeElevation - 0.5) * 120);
+  scores.slopeScore = clampScore(100 - local.slopeMeanDeg * 8 - local.slopeMaxDeg * 2);
+  scores.roughnessScore = clampScore(100 - roughness.rmsMeters * 1.2 - roughness.triMeters * 2.1);
+  scores.curvatureScore = clampScore(100 - Math.abs(curvature.totalPerMeter) * 420000);
+
+  const dominantShadow = hazard.horizonExposure.dominantShadowAzimuthDeg;
+  const downslope = aspect.downslopeAzimuthDeg;
+  const directionalScore = Number.isFinite(dominantShadow) && Number.isFinite(downslope)
+    ? (angularSeparation(downslope, dominantShadow) / 180) * 100
+    : 50;
+  scores.downslopeScore = clampScore(directionalScore);
+
+  return scores;
+}
+
+function overallTerrainRating(siteResult, stats, lolaPayload) {
+  const factors = terrainFactorScores(siteResult, stats, lolaPayload);
+  const score = factors.hasTopography
+    ? factors.elevationScore * 0.60 +
+      factors.slopeScore * 0.10 +
+      factors.roughnessScore * 0.25 +
+      factors.curvatureScore * 0.05 +
+      factors.downslopeScore * 0.00
+    : 50;
+  const finalScore = clampScore(score);
+  return { score: finalScore, letter: letterGrade(finalScore), factors };
+}
+
+function clampTen(value) {
+  return Math.max(0, Math.min(10, value));
+}
+
+function directVisibilityMetrics(target, siteResult, params) {
+  const targetRows = siteResult?.[target]?.rows ?? [];
+  if (targetRows.length < 2 || !params) {
+    return {
+      durationPercent: 0,
+      timeBeforeSetHours: 0,
+      meanElevationDeg: 0,
+      peakElevationDeg: 0
+    };
+  }
+
+  const start = Date.parse(params.get('start') + ':00Z');
+  const stop = Date.parse(params.get('stop') + ':00Z');
+  if (!Number.isFinite(start) || !Number.isFinite(stop) || stop <= start) {
+    return {
+      durationPercent: 0,
+      timeBeforeSetHours: 0,
+      meanElevationDeg: 0,
+      peakElevationDeg: 0
+    };
+  }
+
+  const times = [
+    start,
+    ...targetRows.map(row => Date.parse(row.time)).filter(time => time > start && time < stop),
+    stop
+  ];
+  const totalDuration = Math.max(1, stop - start);
+
+  const apparentElevationAt = time => elevationAt(time, targetRows);
+  const clearanceAt = time => {
+    const horizon = terrainHorizonAt(time, target, siteResult);
+    return apparentElevationAt(time) - horizon;
+  };
+
+  let visibleDuration = 0;
+  let weightedElevation = 0;
+  let weightedDuration = 0;
+  let peakElevation = -90;
+  let timeBeforeSetMs = 0;
+  let waitingForSet = clearanceAt(start) > 0;
+
+  for (let index = 1; index < times.length; index += 1) {
+    const previousTime = times[index - 1];
+    const currentTime = times[index];
+    const interval = Math.max(0, currentTime - previousTime);
+    const previousClearance = clearanceAt(previousTime);
+    const currentClearance = clearanceAt(currentTime);
+    const previousElevation = apparentElevationAt(previousTime);
+    const currentElevation = apparentElevationAt(currentTime);
+
+    let positiveDuration = 0;
+    let positiveStartTime;
+    let positiveEndTime;
+    let positiveStartElevation;
+    let positiveEndElevation;
+
+    if (previousClearance > 0 && currentClearance > 0) {
+      positiveDuration = interval;
+      positiveStartTime = previousTime;
+      positiveEndTime = currentTime;
+      positiveStartElevation = previousElevation;
+      positiveEndElevation = currentElevation;
+    } else if (previousClearance > 0 && currentClearance <= 0) {
+      const crossingFraction = previousClearance / (previousClearance - currentClearance);
+      const crossingTime = previousTime + interval * crossingFraction;
+      const crossingElevation = previousElevation + (currentElevation - previousElevation) * crossingFraction;
+      positiveDuration = crossingTime - previousTime;
+      positiveStartTime = previousTime;
+      positiveEndTime = crossingTime;
+      positiveStartElevation = previousElevation;
+      positiveEndElevation = crossingElevation;
+      if (waitingForSet) {
+        timeBeforeSetMs = crossingTime - start;
+        waitingForSet = false;
+      }
+    } else if (previousClearance <= 0 && currentClearance > 0) {
+      const crossingFraction = previousClearance / (previousClearance - currentClearance);
+      const crossingTime = previousTime + interval * crossingFraction;
+      const crossingElevation = previousElevation + (currentElevation - previousElevation) * crossingFraction;
+      positiveDuration = currentTime - crossingTime;
+      positiveStartTime = crossingTime;
+      positiveEndTime = currentTime;
+      positiveStartElevation = crossingElevation;
+      positiveEndElevation = currentElevation;
+      waitingForSet = true;
+    }
+
+    visibleDuration += positiveDuration;
+
+    if (positiveDuration > 0) {
+      const meanElevation = (positiveStartElevation + positiveEndElevation) / 2;
+      weightedElevation += Math.max(0, meanElevation) * (positiveEndTime - positiveStartTime);
+      weightedDuration += positiveDuration;
+      peakElevation = Math.max(peakElevation, positiveStartElevation, positiveEndElevation);
+    }
+  }
+
+  if (waitingForSet) {
+    timeBeforeSetMs = totalDuration;
+  }
+
+  const meanElevationDeg = weightedDuration > 0 ? weightedElevation / weightedDuration : 0;
+  const durationPercent = visibleDuration / totalDuration * 100;
+  return {
+    durationPercent,
+    timeBeforeSetHours: timeBeforeSetMs / 3_600_000,
+    meanElevationDeg,
+    peakElevationDeg: Math.max(0, peakElevation)
+  };
+}
+
+function missionObjectiveScores(siteResult, siteParams, stats, lolaPayload, terrainRating) {
+  const sun = directVisibilityMetrics('sun', siteResult, siteParams);
+  const earth = directVisibilityMetrics('earth', siteResult, siteParams);
+
+  const solarAngleEfficiency = Math.sin(Math.max(0, Math.min(90, sun.meanElevationDeg)) * Math.PI / 180);
+  const solarPeakEfficiency = Math.sin(Math.max(0, Math.min(90, sun.peakElevationDeg)) * Math.PI / 180);
+  const solarElevationScore = clampTen((solarAngleEfficiency * 0.75 + solarPeakEfficiency * 0.25) * 10);
+
+  const sunlightDurationScore = clampTen(sun.durationPercent / 10);
+  const sunlightSetBufferScore = clampTen(sun.timeBeforeSetHours / 2.4);
+  const sunlightScore = clampTen(sunlightDurationScore * 0.65 + sunlightSetBufferScore * 0.35);
+
+  const earthDurationScore = clampTen(earth.durationPercent / 10);
+  const earthSetBufferScore = clampTen(earth.timeBeforeSetHours / 2.4);
+  const directEarthScore = clampTen(earthDurationScore * 0.7 + earthSetBufferScore * 0.3);
+
+  const terrainTen = clampTen(
+    terrainRating.factors.hasTopography
+      ? terrainRating.score / 10
+      : 5
+  );
+
+  const finalScore = clampTen((terrainTen + solarElevationScore + sunlightScore + directEarthScore) / 4);
+
+  const warnings = [];
+  if (sunlightScore < 4) warnings.push('Limited sunlight windows: power margin is low and thermal swings may increase.');
+  if (directEarthScore < 4) warnings.push('Direct-to-Earth communication windows are short; relay planning is recommended.');
+  if (solarElevationScore < 4) warnings.push('Low average solar elevation reduces effective panel irradiance.');
+  if (terrainTen < 4) warnings.push('Local terrain complexity may obstruct low-angle Sun/Earth lines of sight.');
+  if (!terrainRating.factors.hasTopography) warnings.push('Full LOLA terrain categories are not available yet; terrain score is a fallback estimate.');
+
+  return {
+    terrainTen,
+    solarElevationScore,
+    sunlightScore,
+    directEarthScore,
+    finalScore,
+    details: {
+      sunDurationPercent: sun.durationPercent,
+      sunTimeBeforeSetHours: sun.timeBeforeSetHours,
+      sunMeanElevationDeg: sun.meanElevationDeg,
+      sunPeakElevationDeg: sun.peakElevationDeg,
+      earthDurationPercent: earth.durationPercent,
+      earthTimeBeforeSetHours: earth.timeBeforeSetHours
+    },
+    warnings
+  };
+}
+
+function renderObjectiveWarnings(items) {
+  if (!objectiveWarnings) return;
+  if (!items.length) {
+    objectiveWarnings.hidden = true;
+    objectiveWarnings.replaceChildren();
+    return;
+  }
+  const entries = items.map(message => {
+    const item = document.createElement('li');
+    item.textContent = message;
+    return item;
+  });
+  objectiveWarnings.replaceChildren(...entries);
+  objectiveWarnings.hidden = false;
+}
+
 function updateAssessment(params) {
   const siteResult = assessmentSite === 'b' && comparisonResult ? comparisonResult : result;
   const siteParams = assessmentSite === 'b' && comparisonParams ? comparisonParams : params;
+  if (!siteResult || !siteParams) return;
   const stats = { sun: targetStats('sun', siteParams, siteResult), earth: targetStats('earth', siteParams, siteResult) };
   for (const target of ['sun', 'earth']) {
     const current = assessment[target];
@@ -1821,17 +2122,64 @@ function updateAssessment(params) {
     current.max.textContent = targetStatsValue.maximum.toFixed(1) + '°';
     current.obstruction.textContent = targetStatsValue.blockedPercentage < 10 ? 'Low' : targetStatsValue.blockedPercentage < 40 ? 'Moderate' : 'High';
   }
-  const solar = stats.sun.percentage;
-  const communications = stats.earth.percentage;
-  const rating = solar >= 50 && communications >= 50 ? 'Promising site' : solar > 0 && communications > 0 ? 'Conditional site' : 'Challenging site';
-  siteRating.textContent = rating;
-  siteVerdict.textContent = solar >= 50 && communications >= 50
-    ? 'Strong solar power and Earth communication windows.'
-    : solar >= 50
-      ? 'Good solar potential, but Earth visibility is limited.'
-      : communications >= 50
-        ? 'Strong Earth visibility, but limited solar availability.'
-        : 'Both power and communication windows are limited by the terrain horizon.';
+
+  const lolaPayload = assessmentLolaData[assessmentSite];
+  const rating = overallTerrainRating(siteResult, stats, lolaPayload);
+  const objectives = missionObjectiveScores(siteResult, siteParams, stats, lolaPayload, rating);
+  const finalLetter = letterGrade(objectives.finalScore * 10);
+  siteRating.textContent = 'Grade ' + finalLetter + ' · ' + objectives.finalScore.toFixed(1) + '/10';
+
+  const factors = rating.factors;
+  const siteLabel = assessmentSite === 'a' ? 'Site A' : 'Site B';
+  const formatPeriodValue = value => (value ? value.replace('T', ' ') + ' UTC' : '—');
+  const periodStart = formatPeriodValue(siteParams.get('start'));
+  const periodStop = formatPeriodValue(siteParams.get('stop'));
+  siteVerdict.textContent =
+    'Site: ' + siteLabel + '\n' +
+    'Period: ' + periodStart + ' to ' + periodStop + '\n' +
+    'Final Weighted Score: ' + objectives.finalScore.toFixed(1) + '/10';
+  const otherSiteResult = assessmentSite === 'a' ? comparisonResult : result;
+  const otherSiteParams = assessmentSite === 'a' ? comparisonParams : resultParams;
+  const otherLola = assessmentSite === 'a' ? assessmentLolaData.b : assessmentLolaData.a;
+  const otherStats = otherSiteResult && otherSiteParams
+    ? { sun: targetStats('sun', otherSiteParams, otherSiteResult), earth: targetStats('earth', otherSiteParams, otherSiteResult) }
+    : undefined;
+  const otherObjectives = otherStats
+    ? missionObjectiveScores(otherSiteResult, otherSiteParams, otherStats, otherLola,
+      overallTerrainRating(otherSiteResult, otherStats, otherLola))
+    : undefined;
+
+  const rankSuffix = (score, otherScore) => {
+    if (!otherObjectives || !Number.isFinite(otherScore)) return '';
+    if (Math.abs(score - otherScore) < 0.05) return ' (tied)';
+    return score > otherScore ? ' (rank #1)' : ' (rank #2)';
+  };
+
+  objectiveTerrainScore.textContent = objectives.terrainTen.toFixed(1) + '/10' +
+    rankSuffix(objectives.terrainTen, otherObjectives?.terrainTen);
+  objectiveSolarAngleScore.textContent = objectives.solarElevationScore.toFixed(1) + '/10' +
+    rankSuffix(objectives.solarElevationScore, otherObjectives?.solarElevationScore);
+  objectiveSunlightScore.textContent = objectives.sunlightScore.toFixed(1) + '/10' +
+    rankSuffix(objectives.sunlightScore, otherObjectives?.sunlightScore);
+  objectiveEarthScore.textContent = objectives.directEarthScore.toFixed(1) + '/10' +
+    rankSuffix(objectives.directEarthScore, otherObjectives?.directEarthScore);
+
+  objectiveTerrainDetail.textContent =
+    'Local terrain rating summarizes LOLA-derived elevation context, slope, roughness, and curvature into a single 0-10 score.';
+  objectiveTerrainDetail.hidden = false;
+  objectiveSolarAngleDetail.textContent = 'Based on mean/peak Sun elevation while visible.\nMean elevation: ' +
+    objectives.details.sunMeanElevationDeg.toFixed(1) + '°.\nPeak elevation: ' +
+    objectives.details.sunPeakElevationDeg.toFixed(1) + '°.';
+  objectiveSunlightDetail.textContent = 'Duration: ' + objectives.details.sunDurationPercent.toFixed(1) +
+    '% of window.\nTime before sunset: ' + objectives.details.sunTimeBeforeSetHours.toFixed(1) + ' hr.';
+  objectiveEarthDetail.textContent = 'Direct Earth Access: ' + objectives.details.earthDurationPercent.toFixed(1) +
+    '% of window.\nTime before Earth set: ' + objectives.details.earthTimeBeforeSetHours.toFixed(1) + ' hr.';
+
+  objectiveOverall.textContent = 'Final Weighted Score: ' + objectives.finalScore.toFixed(1) + '/10' +
+    rankSuffix(objectives.finalScore, otherObjectives?.finalScore);
+  objectiveLogic.textContent = '';
+  objectiveLogic.hidden = true;
+  renderObjectiveWarnings(objectives.warnings);
 }
 
 function openAssessmentModal() {
@@ -2074,6 +2422,8 @@ function renderResult(payload, params, comparison, comparisonParamsInput, separa
   download.disabled = false;
   assessmentLaunch.disabled = false;
   updateAssessment(params);
+  loadAssessmentLola('a', params);
+  if (comparisonParamsInput) loadAssessmentLola('b', comparisonParamsInput);
   openAssessmentModal();
   renderTable();
   const siteVisibility = updateVisibility(params, comparisonParamsInput);

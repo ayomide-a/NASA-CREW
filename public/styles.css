@@ -190,7 +190,7 @@ input:hover, select:hover { border-color: #575960; }
 .eyebrow { color: var(--accent); font: .68rem var(--mono); letter-spacing: .08em; text-transform: uppercase; }
 .assessment-heading h3 { margin-top: 5px; font-size: 1.05rem; font-weight: 600; }
 .site-rating { padding: 6px 9px; border: 1px solid var(--edge); border-radius: 5px; color: var(--accent); font: .72rem var(--mono); white-space: nowrap; }
-.site-verdict { max-width: 650px; margin-top: 7px; color: var(--muted); font-size: .82rem; }
+.site-verdict { max-width: 650px; margin-top: 7px; color: var(--muted); font-size: .82rem; line-height: 1.5; white-space: pre-line; }
 .assessment-modal { position: fixed; z-index: 30; inset: 0; display: grid; place-items: center; padding: 24px; background: rgba(8, 9, 10, .78); }
 .assessment-dialog { width: min(720px, 100%); padding: 22px; border: 1px solid var(--edge); border-radius: 12px; background: var(--panel); box-shadow: 0 18px 60px rgba(0, 0, 0, .45); }
 .assessment-dialog-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
@@ -211,6 +211,15 @@ input:hover, select:hover { border-color: #575960; }
 .assessment-card dl div { display: flex; justify-content: space-between; gap: 8px; }
 .assessment-card dt { color: var(--muted); font-size: .72rem; }
 .assessment-card dd { margin: 0; color: var(--ink); font: .72rem var(--mono); }
+.objective-scores { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
+.objective-card { padding: 12px; border: 1px solid var(--edge); border-radius: 8px; background: color-mix(in oklab, var(--panel), var(--input) 34%); }
+.objective-card h4 { margin: 0; color: var(--muted); font: .68rem var(--mono); text-transform: uppercase; letter-spacing: .04em; }
+.objective-score { margin-top: 8px; color: var(--accent); font: 700 1.03rem var(--mono); }
+.objective-detail { margin-top: 6px; color: var(--muted); font: .7rem/1.45 var(--mono); white-space: pre-line; }
+.objective-overall { margin-top: 12px; padding: 10px 12px; border: 1px solid #6d5943; border-left: 3px solid var(--accent); border-radius: 7px; color: var(--ink); background: rgb(255 195 132 / 6%); font: 600 .78rem/1.4 var(--mono); }
+.objective-logic { margin-top: 8px; color: var(--muted); font: .72rem/1.5 var(--mono); white-space: pre-line; }
+.objective-warnings { margin: 8px 0 0; padding-left: 18px; color: #ffcf9d; font: .7rem/1.45 var(--mono); }
+.objective-warnings li + li { margin-top: 4px; }
 .chart-head { display: flex; justify-content: space-between; gap: 7px; align-items: center; flex-wrap: wrap; }
 .chart-head h3 { font-size: .97rem; font-weight: 600; }
 .chart-instruction { margin-top: 5px; color: var(--muted); font: .72rem var(--mono); }
@@ -298,6 +307,7 @@ footer { margin-top: 24px; padding-block: 18px 26px; color: var(--muted); font: 
 }
 @media (max-width: 500px) {
   .assessment-grid { grid-template-columns: 1fr; }
+  .objective-scores { grid-template-columns: 1fr; }
   .assessment-heading { flex-direction: column; }
   #chart-a, #chart-b { height: 220px; }
   .visibility-items { gap: 2px; }
